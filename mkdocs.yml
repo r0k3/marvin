@@ -1,0 +1,68 @@
+site_name: Marvin
+site_description: An Obsidian-native, Git-backed active memory cluster for AI agents.
+site_url: https://r0k3.github.io/marvin/
+
+theme:
+  name: material
+  palette:
+    # Palette toggle for dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: deep purple
+      accent: deep orange
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+    # Palette toggle for light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: deep purple
+      accent: deep orange
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - navigation.indexes
+    - content.code.copy
+    - content.code.annotate
+    - content.tabs.link
+  logo: assets/logo.svg
+  favicon: assets/logo.svg
+
+repo_name: r0k3/marvin
+repo_url: https://github.com/r0k3/marvin
+edit_uri: edit/main/docs/
+
+plugins:
+  - search
+
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+  - admonition
+  - pymdownx.details
+  - attr_list
+
+nav:
+  - Home: index.md
+  - Architecture: architecture.md
+  - Guide:
+      - Getting Started: guide/getting-started.md
+      - Agent Skills: guide/skills.md
+      - Case Study: guide/case-study.md
+  - Reference:
+      - MCP Tools: reference/mcp-tools.md

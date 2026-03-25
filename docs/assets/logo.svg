@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="100%" height="100%">
+  <!-- Background circle representing a node / the mind -->
+  <circle cx="200" cy="200" r="190" fill="#673ab7" />
+  
+  <!-- Face base (bald, friendly, reminiscent of Minsky) -->
+  <path d="M120,150 C120,80 280,80 280,150 C290,260 250,320 200,320 C150,320 110,260 120,150 Z" fill="#ffd1b3" />
+  
+  <!-- Ears -->
+  <circle cx="120" cy="200" r="20" fill="#f0c0a0" />
+  <circle cx="280" cy="200" r="20" fill="#f0c0a0" />
+
+  <!-- Thick Nerdy Glasses -->
+  <!-- Left lens -->
+  <rect x="130" y="170" width="60" height="40" rx="10" fill="none" stroke="#222" stroke-width="8" />
+  <!-- Right lens -->
+  <rect x="210" y="170" width="60" height="40" rx="10" fill="none" stroke="#222" stroke-width="8" />
+  <!-- Bridge -->
+  <line x1="190" y1="190" x2="210" y2="190" stroke="#222" stroke-width="8" />
+  <!-- Arms -->
+  <line x1="120" y1="190" x2="130" y2="190" stroke="#222" stroke-width="8" />
+  <line x1="270" y1="190" x2="280" y2="190" stroke="#222" stroke-width="8" />
+  
+  <!-- Eyes (friendly dots) -->
+  <circle cx="160" cy="190" r="6" fill="#222" />
+  <circle cx="240" cy="190" r="6" fill="#222" />
+  
+  <!-- Smile -->
+  <path d="M170,250 Q200,280 230,250" fill="none" stroke="#222" stroke-width="6" stroke-linecap="round" />
+  
+  <!-- Knowledge graph nodes floating above his head (representing K-Lines) -->
+  <circle cx="200" cy="70" r="12" fill="#ff5722" />
+  <circle cx="140" cy="100" r="10" fill="#ff5722" />
+  <circle cx="260" cy="90" r="8" fill="#ff5722" />
+  
+  <line x1="200" y1="70" x2="140" y2="100" stroke="#ff5722" stroke-width="3" opacity="0.7" />
+  <line x1="200" y1="70" x2="260" y2="90" stroke="#ff5722" stroke-width="3" opacity="0.7" />
+  
+  <!-- Little connection down to his head -->
+  <line x1="200" y1="70" x2="200" y2="110" stroke="#ff5722" stroke-width="3" stroke-dasharray="4,4" opacity="0.5" />
+</svg>

@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.venv/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Generated
+site/
+
+# Experiments (generated vaults and one-off scripts)
+experiments/vaults/
+experiments/scripts/hello_marvin.py
+experiments/scripts/test_lx.py
+experiments/scripts/save_memory.py
+experiments/scripts/run_full_experiment.py

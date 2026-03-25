@@ -1,0 +1,49 @@
+version: "3.8"
+
+services:
+  nats:
+    image: nats:alpine
+    ports:
+      - "4222:4222"
+    command: ["-js"] # Enable JetStream
+
+  ollama:
+    image: ollama/ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    # Note: the user will need to run `docker exec -it ollama ollama run qwen3.5:9b` once to pull the model
+
+  mcp-gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8421:8421"
+    environment:
+      - MARVIN_TRANSPORT=sse
+      - MARVIN_HOST=0.0.0.0
+      - MARVIN_PORT=8421
+      - NATS_URL=nats://nats:4222
+    volumes:
+      - ./marvin_vault:/app/marvin_vault
+    depends_on:
+      - nats
+
+  brain-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["uv", "run", "python", "-m", "marvin.worker"]
+    environment:
+      - NATS_URL=nats://nats:4222
+      - OLLAMA_HOST=http://ollama:11434
+    volumes:
+      - ./marvin_vault:/app/marvin_vault
+    depends_on:
+      - nats
+      - ollama
+
+volumes:
+  ollama_data:

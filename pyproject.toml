@@ -1,0 +1,61 @@
+[project]
+name = "marvin"
+version = "0.1.0"
+description = "Obsidian-native long-term memory for coding and chat agents over MCP"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.12"
+authors = [
+    { name = "r0k3", email = "robert.kende@gmail.com" },
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries",
+]
+dependencies = [
+    "fastapi>=0.135.2",
+    "fastembed>=0.8.0",
+    "gitpython>=3.1.46",
+    "langextract>=1.2.0",
+    "litellm",
+    "mcp>=1.26.0",
+    "nats-py>=2.14.0",
+    "pydantic>=2.12.5",
+    "pydantic-settings>=2.13.1",
+    "pyyaml>=6.0.3",
+    "sqlite-vec>=0.1.7",
+    "uvicorn>=0.42.0",
+    "watchdog>=6.0.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/r0k3/marvin"
+Repository = "https://github.com/r0k3/marvin"
+Documentation = "https://r0k3.github.io/marvin"
+Issues = "https://github.com/r0k3/marvin/issues"
+
+[project.scripts]
+marvin = "marvin.server:main"
+
+[dependency-groups]
+dev = [
+    "mkdocs",
+    "mkdocs-material",
+    "mkdocs-material-extensions",
+    "pytest>=9.0.2",
+    "ruff>=0.15.7",
+]
+
+[build-system]
+requires = ["hatchling>=1.27.0"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/marvin"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
