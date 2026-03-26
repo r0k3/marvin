@@ -60,7 +60,7 @@ src/marvin/         # Core library
 └── skill.md        # Agent skill instructions
 tests/              # Pytest test suite
 docs/               # MkDocs documentation
-experiments/        # Research scripts and experiment outputs
+examples/           # Example vaults showcasing memory types
 ```
 
 ## Pull Requests

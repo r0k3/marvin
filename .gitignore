@@ -20,9 +20,7 @@ htmlcov/
 # Generated
 site/
 
-# Experiments (generated vaults and one-off scripts)
-experiments/vaults/
-experiments/scripts/hello_marvin.py
-experiments/scripts/test_lx.py
-experiments/scripts/save_memory.py
-experiments/scripts/run_full_experiment.py
+# Local experiments (not published)
+experiments/
+
+
