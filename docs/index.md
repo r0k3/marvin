@@ -6,7 +6,7 @@
 
 **Marvin** is an active, Obsidian-native, Git-backed memory cluster designed for professional AI agents.
 
-Named in homage to **Marvin Minsky** and his foundational book *The Society of Mind*, this project transforms the concept of ephemeral LLM context windows into a durable, topologically connected knowledge base. It is a practical implementation of the cognitive architectures detailed in the research paper [*K-Lines: A Framework for LLM Agent Memory*](https://papers.ssrn.com/sol3/papers.cfm?abstract_id=6234218) (and its [companion repository](https://github.com/r0k3/k-lines)).
+Named in homage to **Marvin Minsky** and his foundational book [*The Society of Mind*](https://amzn.to/3PuFQ3K), this project transforms the concept of ephemeral LLM context windows into a durable, topologically connected knowledge base. It is a practical implementation of the cognitive architectures detailed in the research paper [*K-Lines: A Framework for LLM Agent Memory*](https://papers.ssrn.com/sol3/papers.cfm?abstract_id=6234218) (and its [companion repository](https://github.com/r0k3/k-lines)).
 
 ---
 
