@@ -48,3 +48,7 @@ Marvin utilizes a Dockerized architecture with a **NATS** message broker and a b
 Marvin is not a simple "plug and play" toy script. It is an orchestrated cluster designed for **power users, AI researchers, and professional developers** who want to build a deeply integrated, highly maintainable, and completely local "second brain" for their autonomous coding agents.
 
 If you are ready to give your agent a serious memory upgrade, head over to the [Getting Started](guide/getting-started.md) guide.
+
+---
+
+**Quick links:** [GitHub Repository](https://github.com/r0k3/marvin) | [Quick Start & Agent Config](https://github.com/r0k3/marvin#quick-start) | [Research Paper (SSRN)](https://papers.ssrn.com/sol3/papers.cfm?abstract_id=6234218)

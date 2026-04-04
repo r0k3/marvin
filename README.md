@@ -1,36 +1,43 @@
 # Marvin
 
+<p align="center">
+  <img src="docs/assets/logo.svg" width="180" alt="Marvin">
+</p>
+
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue.svg)](https://www.python.org/downloads/)
 [![MCP](https://img.shields.io/badge/MCP-compatible-green.svg)](https://modelcontextprotocol.io)
+[![Docs](https://img.shields.io/badge/docs-r0k3.github.io%2Fmarvin-blueviolet)](https://r0k3.github.io/marvin/)
 
-**Markdown/Obsidian-native, Git-backed long-term memory for AI coding agents.**
+**An active, Obsidian-native, Git-backed memory cluster for professional AI agents.**
 
-Marvin gives AI agents (Claude, Goose, Cursor, etc.) durable memory that persists across sessions — stored as plain Markdown you can browse in [Obsidian](https://obsidian.md). It exposes 13 MCP tools over SSE/stdio, runs entirely local via Docker Compose, and consolidates noisy logs into permanent knowledge while you sleep.
-
-> Named after [Marvin Minsky](https://en.wikipedia.org/wiki/Marvin_Minsky). Based on his *K-Lines* theory of memory — see the companion paper on [SSRN (Abstract #6234218)](https://papers.ssrn.com/sol3/papers.cfm?abstract_id=6234218).
+Named in homage to **Marvin Minsky** and his foundational book [*The Society of Mind*](https://amzn.to/3PuFQ3K), Marvin transforms ephemeral LLM context windows into a durable, topologically connected knowledge base. It is a practical implementation of the cognitive architectures detailed in the research paper [*K-Lines: A Framework for LLM Agent Memory*](https://papers.ssrn.com/sol3/papers.cfm?abstract_id=6234218) (and its [companion repository](https://github.com/r0k3/k-lines)).
 
 ---
 
 ## Why Marvin?
 
-AI coding agents are stateless by default. Every session starts from zero — context is lost, mistakes are repeated, and institutional knowledge never accumulates. Marvin solves this by giving agents a **structured, persistent memory system** inspired by Minsky's K-Lines paper:
+Most agentic "memory skills" today simply dump chat logs into a hidden SQLite database or a black-box vector store. This is sufficient for casual chatbots, but it breaks down rapidly in professional software engineering workflows. When you take your agent's memories seriously, you need **ergonomics, interpretability, and safety**.
 
-- **Semantic** memories store durable facts ("the auth service uses JWT tokens")
-- **Procedural** memories store reusable rules ("always run tests before committing")
-- **Episodic** memories log what happened during a session
-- **Reflective** memories capture design principles and lessons learned
+Marvin is built around three core philosophies:
 
-A background worker continuously distills noisy episodes into permanent knowledge — the same way human memory consolidates during sleep.
+### 1. The Ergonomics of Obsidian (Markdown)
+Instead of locking agent memories inside a proprietary database, Marvin writes everything as clean, human-readable **Markdown files with YAML frontmatter** — organized into `Semantic/`, `Procedural/`, `Episodic/`, and `Reflective/` folders. Point your [Obsidian](https://obsidian.md/) vault at Marvin's storage directory and you instantly get a visual graph of everything your agent has learned. You can manually edit, co-author, and browse the knowledge base alongside your AI.
+
+### 2. Safety through Git (Agentic Worktrees)
+Agents hallucinate and explore dead ends. Because Marvin's vault is natively backed by **Git**, agents can check out isolated worktree branches. If a task succeeds, the memory branch is merged. If it fails, the branch is discarded. Ground truth stays clean, with full `git blame` for your agent's thoughts.
+
+### 3. Asynchronous Consolidation (Computational Sleep)
+Biological memory isn't just stored; it is *consolidated* while we sleep. Marvin uses a **NATS** message broker and a background **Brain Worker** — while your agent rapidly logs noisy Episodic events, the Brain Worker asynchronously extracts entities via [`langextract`](https://github.com/google/langextract), injects `[[Wikilinks]]`, and distills raw logs into permanent Semantic facts and Procedural rules using a local LLM (`qwen3.5:9b`).
 
 ## Features
 
-- **🗄️ Obsidian-Native Vault** — All memories are clean Markdown files with YAML frontmatter, organized by type (`Semantic/`, `Procedural/`, `Episodic/`, `Reflective/`). Open the vault directly in Obsidian for full graph visualization.
-- **🌿 Git-Backed Worktrees** — The vault is a Git repository. Agents can branch memory for risky tasks — if it fails, discard; if it succeeds, merge. Ground truth stays clean.
-- **🔗 Deep Semantic Graphing** — The Brain Worker uses Google's [`langextract`](https://github.com/google/langextract) for zero-shot entity extraction, automatically injecting `[[Wikilinks]]` to build a dense, traversable knowledge graph.
-- **😴 Computational Sleep** — A background worker reads noisy Episodic logs, distills them via a local LLM (Ollama), and writes permanent Semantic facts and Procedural rules — all while you're away.
-- **🔍 Hybrid Retrieval** — SQLite-vec for vector search (local ONNX embeddings) + FTS5 for keyword search, combined via Reciprocal Rank Fusion (RRF).
-- **🔌 MCP Gateway** — FastMCP server with 13 tools over SSE (port 8421) or stdio. Plug into any MCP-compatible agent.
+- **Obsidian-Native Vault** — Clean Markdown with YAML frontmatter, full graph visualization in Obsidian.
+- **Git-Backed Worktrees** — Branch memory for risky tasks; merge on success, discard on failure.
+- **Deep Semantic Graphing** — Zero-shot entity extraction with automatic `[[Wikilink]]` injection.
+- **Computational Sleep** — Background consolidation via local open-weight models (Ollama).
+- **Hybrid Retrieval** — SQLite-vec (ONNX embeddings) + FTS5 keyword search, combined via Reciprocal Rank Fusion.
+- **MCP Gateway** — 13 tools over SSE (port 8421) or stdio. Plug into any MCP-compatible agent.
 
 ## Architecture
 
@@ -136,7 +143,7 @@ The skill is at [`src/marvin/skill.md`](src/marvin/skill.md). In Goose, add it a
 
 ## Documentation
 
-Full documentation is available at [**r0k3.github.io/marvin**](https://r0k3.github.io/marvin/).
+Full documentation — architecture deep-dives, getting started guide, agent skills reference, and case studies — is available at **[r0k3.github.io/marvin](https://r0k3.github.io/marvin/)**.
 
 ## Contributing
 
