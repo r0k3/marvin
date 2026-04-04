@@ -1,15 +1,19 @@
 import asyncio
+import logging
 import os
+
 from marvin.broker import MarvinBroker
-from marvin.extraction import extract_entities, auto_link_markdown
-from marvin.consolidation import ConsolidationEngine
 from marvin.config import MarvinSettings
-from marvin.service import MarvinService
+from marvin.consolidation import ConsolidationEngine
+from marvin.extraction import auto_link_markdown, extract_entities
 from marvin.git import GitManager
+from marvin.service import MarvinService
+
+logger = logging.getLogger(__name__)
 
 
 async def run_worker():
-    print("Starting Marvin Brain Worker...")
+    logger.info("Starting Marvin Brain Worker...")
 
     settings = MarvinSettings()
     # NATS URL from environment, or default
@@ -28,7 +32,7 @@ async def run_worker():
         if not path_str:
             return
 
-        print(f"Worker processing new memory: {path_str}")
+        logger.info("Worker processing new memory: %s", path_str)
         full_path = settings.resolved_vault_path / path_str
         if not full_path.exists():
             return
@@ -38,13 +42,13 @@ async def run_worker():
             note = service.vault.read_note(full_path)
             content = note.body
         except Exception as e:
-            print(f"Could not read note: {e}")
+            logger.warning("Could not read note: %s", e)
             return
 
         # 2. Extract Entities
         entities = extract_entities(content)
         if entities:
-            print(f"Extracted entities: {entities}")
+            logger.info("Extracted entities: %s", entities)
             # 3. Auto-link
             new_content = auto_link_markdown(content, entities)
 
@@ -60,24 +64,20 @@ async def run_worker():
                 )
 
                 # Commit via Git
-                git_manager.commit(
-                    f"chore(graph): auto-linked entities in {note.metadata.title}"
-                )
+                git_manager.commit(f"chore(graph): auto-linked entities in {note.metadata.title}")
 
     async def handle_sleep(payload: dict):
-        print("Worker starting computational sleep (Consolidation)...")
+        logger.info("Worker starting computational sleep (Consolidation)...")
         # Find all un-consolidated episodic memories
         episodes = service.vault.list_notes(kind=service.vault._parse_kind("episodic"))
 
         # In a real impl, we'd check for a 'consolidated: true' frontmatter flag.
         # For MVP, we'll just take the 5 most recent.
-        recent_eps = sorted(
-            episodes, key=lambda x: x.metadata.created_at, reverse=True
-        )[:5]
+        recent_eps = sorted(episodes, key=lambda x: x.metadata.created_at, reverse=True)[:5]
         texts = [ep.body for ep in recent_eps]
 
         if not texts:
-            print("No episodes to consolidate.")
+            logger.info("No episodes to consolidate.")
             return
 
         result = consolidation_engine.consolidate_episodes(texts)
@@ -94,21 +94,19 @@ async def run_worker():
             service.store_procedure(
                 title=item.get("title", "New Rule"), steps=[item.get("rule", "")]
             )
-            
+
         # Write new Reflective insights
         for item in result.get("reflective", []):
-            service.reflect(
-                title=item.get("title", "New Insight"), insight=item.get("insight", "")
-            )
+            service.reflect(title=item.get("title", "New Insight"), insight=item.get("insight", ""))
 
         if result.get("semantic") or result.get("procedural"):
             git_manager.commit("chore(sleep): nightly consolidation completed")
-            print("Consolidation successful.")
+            logger.info("Consolidation successful.")
 
     await broker.subscribe("memory.created", handle_memory_created)
     await broker.subscribe("memory.sleep", handle_sleep)
 
-    print("Worker listening for events...")
+    logger.info("Worker listening for events...")
     # Keep alive
     while True:
         await asyncio.sleep(3600)

@@ -12,9 +12,7 @@ import sqlite_vec
 from .models import ChunkRecord, MemoryKind, NoteRecord, SearchHit
 
 
-def chunk_markdown(
-    note: NoteRecord, chunk_size: int, chunk_overlap: int
-) -> list[ChunkRecord]:
+def chunk_markdown(note: NoteRecord, chunk_size: int, chunk_overlap: int) -> list[ChunkRecord]:
     sections = _split_sections(note.body)
     chunks: list[ChunkRecord] = []
     carry = ""
@@ -56,7 +54,11 @@ def chunk_markdown(
                 chunk_index=0,
                 heading="",
                 tags_text=tags_text,
-                text=f"Title: {note.metadata.title}\nKind: {note.metadata.kind.value}\n\n{note.body.strip()}".strip(),
+                text=(
+                    f"Title: {note.metadata.title}\n"
+                    f"Kind: {note.metadata.kind.value}\n\n"
+                    f"{note.body.strip()}"
+                ).strip(),
             )
         )
     return chunks
@@ -192,9 +194,7 @@ class MemoryIndex:
                     ),
                 )
                 chunk_id = chunk_cursor.lastrowid
-                packed = sqlite_vec.serialize_float32(
-                    np.asarray(embedding, dtype=np.float32)
-                )
+                packed = sqlite_vec.serialize_float32(np.asarray(embedding, dtype=np.float32))
                 self.conn.execute(
                     "INSERT INTO chunks_vec (rowid, embedding) VALUES (?, ?)",
                     (chunk_id, packed),
@@ -282,9 +282,7 @@ class MemoryIndex:
             if existing is None or score > note_scores.get(relative_path, 0.0):
                 note_best_chunk[relative_path] = row
 
-        sorted_paths = sorted(
-            note_scores, key=lambda path: note_scores[path], reverse=True
-        )[:limit]
+        sorted_paths = sorted(note_scores, key=lambda path: note_scores[path], reverse=True)[:limit]
         hits: list[SearchHit] = []
         for path in sorted_paths:
             row = note_best_chunk[path]
@@ -329,9 +327,7 @@ class MemoryIndex:
         sql += " ORDER BY distance"
         return self.conn.execute(sql, params).fetchall()
 
-    def _fts_hits(
-        self, *, query: str, limit: int, kind: MemoryKind | None
-    ) -> list[sqlite3.Row]:
+    def _fts_hits(self, *, query: str, limit: int, kind: MemoryKind | None) -> list[sqlite3.Row]:
         cleaned = " ".join(part for part in query.replace('"', " ").split() if part)
         if not cleaned:
             return []
@@ -419,18 +415,24 @@ class MemoryIndex:
             self.conn.execute(
                 """
                 CREATE TRIGGER IF NOT EXISTS chunks_ad AFTER DELETE ON chunks BEGIN
-                    INSERT INTO chunks_fts(chunks_fts, rowid, title, kind, heading, tags_text, text)
-                    VALUES ('delete', old.id, old.title, old.kind, old.heading, old.tags_text, old.text);
+                    INSERT INTO chunks_fts(chunks_fts, rowid, title, kind,
+                        heading, tags_text, text)
+                    VALUES ('delete', old.id, old.title, old.kind,
+                        old.heading, old.tags_text, old.text);
                 END
                 """
             )
             self.conn.execute(
                 """
                 CREATE TRIGGER IF NOT EXISTS chunks_au AFTER UPDATE ON chunks BEGIN
-                    INSERT INTO chunks_fts(chunks_fts, rowid, title, kind, heading, tags_text, text)
-                    VALUES ('delete', old.id, old.title, old.kind, old.heading, old.tags_text, old.text);
-                    INSERT INTO chunks_fts(rowid, title, kind, heading, tags_text, text)
-                    VALUES (new.id, new.title, new.kind, new.heading, new.tags_text, new.text);
+                    INSERT INTO chunks_fts(chunks_fts, rowid, title, kind,
+                        heading, tags_text, text)
+                    VALUES ('delete', old.id, old.title, old.kind,
+                        old.heading, old.tags_text, old.text);
+                    INSERT INTO chunks_fts(rowid, title, kind,
+                        heading, tags_text, text)
+                    VALUES (new.id, new.title, new.kind,
+                        new.heading, new.tags_text, new.text);
                 END
                 """
             )

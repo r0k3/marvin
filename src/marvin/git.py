@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 from pathlib import Path
 
 from git import Repo
@@ -19,9 +20,7 @@ class GitManager:
             # Create an initial commit so branches can be made
             readme_path = self.vault_path / "README.md"
             if not readme_path.exists():
-                readme_path.write_text(
-                    "# Marvin Memory Vault\n\nAuto-generated Git-backed vault."
-                )
+                readme_path.write_text("# Marvin Memory Vault\n\nAuto-generated Git-backed vault.")
             repo.index.add(["README.md"])
             repo.index.commit("chore: init vault")
 
@@ -61,9 +60,7 @@ class GitManager:
 
         return branch_name
 
-    def merge_worktree(
-        self, source_branch: str, target_branch: str = "main"
-    ) -> dict[str, str]:
+    def merge_worktree(self, source_branch: str, target_branch: str = "main") -> dict[str, str]:
         """Merges a worktree branch into the target branch.
 
         If there are conflicts, they need to be resolved.
@@ -89,8 +86,6 @@ class GitManager:
         except Exception as e:
             # Conflict occurred
             # For MVP: Abort merge if conflict. The Brain worker needs to handle this.
-            try:
+            with contextlib.suppress(Exception):
                 repo.git.merge("--abort")
-            except Exception:
-                pass
             return {"status": "conflict", "message": str(e)}

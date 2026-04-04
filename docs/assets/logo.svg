@@ -1,40 +1,105 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="100%" height="100%">
-  <!-- Background circle representing a node / the mind -->
-  <circle cx="200" cy="200" r="190" fill="#673ab7" />
-  
-  <!-- Face base (bald, friendly, reminiscent of Minsky) -->
-  <path d="M120,150 C120,80 280,80 280,150 C290,260 250,320 200,320 C150,320 110,260 120,150 Z" fill="#ffd1b3" />
-  
-  <!-- Ears -->
-  <circle cx="120" cy="200" r="20" fill="#f0c0a0" />
-  <circle cx="280" cy="200" r="20" fill="#f0c0a0" />
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 230" width="200" height="230">
+  <defs>
+    <radialGradient id="hg" cx="42%" cy="38%" r="58%">
+      <stop offset="0%" stop-color="#9575cd"/>
+      <stop offset="100%" stop-color="#512da8"/>
+    </radialGradient>
+    <radialGradient id="bg" cx="50%" cy="28%" r="72%">
+      <stop offset="0%" stop-color="#7e57c2"/>
+      <stop offset="100%" stop-color="#4527a0"/>
+    </radialGradient>
+    <radialGradient id="ag" cx="45%" cy="38%" r="50%">
+      <stop offset="0%" stop-color="#ffab91"/>
+      <stop offset="50%" stop-color="#ff5722"/>
+      <stop offset="100%" stop-color="#d84315"/>
+    </radialGradient>
+    <linearGradient id="lg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#512da8"/>
+      <stop offset="100%" stop-color="#4527a0"/>
+    </linearGradient>
+    <filter id="sh">
+      <feDropShadow dx="0" dy="2" stdDeviation="2.5" flood-color="#1a0a3e" flood-opacity="0.2"/>
+    </filter>
+    <filter id="gl">
+      <feGaussianBlur stdDeviation="4" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
 
-  <!-- Thick Nerdy Glasses -->
-  <!-- Left lens -->
-  <rect x="130" y="170" width="60" height="40" rx="10" fill="none" stroke="#222" stroke-width="8" />
-  <!-- Right lens -->
-  <rect x="210" y="170" width="60" height="40" rx="10" fill="none" stroke="#222" stroke-width="8" />
-  <!-- Bridge -->
-  <line x1="190" y1="190" x2="210" y2="190" stroke="#222" stroke-width="8" />
-  <!-- Arms -->
-  <line x1="120" y1="190" x2="130" y2="190" stroke="#222" stroke-width="8" />
-  <line x1="270" y1="190" x2="280" y2="190" stroke="#222" stroke-width="8" />
-  
-  <!-- Eyes (friendly dots) -->
-  <circle cx="160" cy="190" r="6" fill="#222" />
-  <circle cx="240" cy="190" r="6" fill="#222" />
-  
-  <!-- Smile -->
-  <path d="M170,250 Q200,280 230,250" fill="none" stroke="#222" stroke-width="6" stroke-linecap="round" />
-  
-  <!-- Knowledge graph nodes floating above his head (representing K-Lines) -->
-  <circle cx="200" cy="70" r="12" fill="#ff5722" />
-  <circle cx="140" cy="100" r="10" fill="#ff5722" />
-  <circle cx="260" cy="90" r="8" fill="#ff5722" />
-  
-  <line x1="200" y1="70" x2="140" y2="100" stroke="#ff5722" stroke-width="3" opacity="0.7" />
-  <line x1="200" y1="70" x2="260" y2="90" stroke="#ff5722" stroke-width="3" opacity="0.7" />
-  
-  <!-- Little connection down to his head -->
-  <line x1="200" y1="70" x2="200" y2="110" stroke="#ff5722" stroke-width="3" stroke-dasharray="4,4" opacity="0.5" />
+  <!-- Antenna stick -->
+  <line x1="100" y1="40" x2="100" y2="14" stroke="#7e57c2" stroke-width="3.5" stroke-linecap="round"/>
+  <!-- Antenna ball with glow -->
+  <circle cx="100" cy="11" r="7" fill="url(#ag)" filter="url(#gl)"/>
+  <circle cx="97" cy="8" r="2.2" fill="white" opacity="0.75"/>
+
+  <!-- Head -->
+  <ellipse cx="100" cy="80" rx="54" ry="46" fill="url(#hg)" filter="url(#sh)"/>
+  <!-- Head top shine -->
+  <ellipse cx="88" cy="55" rx="26" ry="10" fill="white" opacity="0.1" transform="rotate(-8,88,55)"/>
+
+  <!-- Ears -->
+  <rect x="40" y="70" width="11" height="22" rx="5.5" fill="#673ab7"/>
+  <rect x="149" y="70" width="11" height="22" rx="5.5" fill="#673ab7"/>
+  <rect x="42" y="73" width="3.5" height="10" rx="1.75" fill="white" opacity="0.12"/>
+  <rect x="153.5" y="73" width="3.5" height="10" rx="1.75" fill="white" opacity="0.12"/>
+
+  <!-- Left eye white -->
+  <ellipse cx="79" cy="76" rx="16" ry="18" fill="white"/>
+  <!-- Left iris -->
+  <ellipse cx="79" cy="78" rx="11" ry="12" fill="#1a1a2e"/>
+  <!-- Left iris color ring -->
+  <ellipse cx="79" cy="78" rx="11" ry="12" fill="none" stroke="#673ab7" stroke-width="2" opacity="0.3"/>
+  <!-- Left pupil highlights -->
+  <circle cx="74" cy="73" r="4.5" fill="white"/>
+  <circle cx="84" cy="82" r="2" fill="white" opacity="0.5"/>
+
+  <!-- Right eye white -->
+  <ellipse cx="121" cy="76" rx="16" ry="18" fill="white"/>
+  <!-- Right iris -->
+  <ellipse cx="121" cy="78" rx="11" ry="12" fill="#1a1a2e"/>
+  <!-- Right iris color ring -->
+  <ellipse cx="121" cy="78" rx="11" ry="12" fill="none" stroke="#673ab7" stroke-width="2" opacity="0.3"/>
+  <!-- Right pupil highlights -->
+  <circle cx="116" cy="73" r="4.5" fill="white"/>
+  <circle cx="126" cy="82" r="2" fill="white" opacity="0.5"/>
+
+  <!-- Cheek blush -->
+  <ellipse cx="58" cy="94" rx="11" ry="6.5" fill="#ff8a80" opacity="0.35"/>
+  <ellipse cx="142" cy="94" rx="11" ry="6.5" fill="#ff8a80" opacity="0.35"/>
+
+  <!-- Mouth (w-shape kawaii) -->
+  <path d="M89,100 Q94,95 100,100 Q106,95 111,100" fill="none" stroke="#2d1654" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- Body / T-shirt -->
+  <rect x="64" y="130" width="72" height="56" rx="16" fill="url(#bg)" filter="url(#sh)"/>
+  <!-- Collar curve -->
+  <path d="M80,130 Q100,142 120,130" fill="none" stroke="#9575cd" stroke-width="2" opacity="0.35"/>
+  <!-- Body top highlight -->
+  <rect x="70" y="133" width="28" height="8" rx="4" fill="white" opacity="0.06"/>
+
+  <!-- M on shirt — shadow layer then main -->
+  <text x="101" y="168" text-anchor="middle" font-family="'Arial Black','Helvetica Neue',Arial,sans-serif" font-weight="900" font-size="30" fill="#1a0a3e" opacity="0.12">M</text>
+  <text x="100" y="167" text-anchor="middle" font-family="'Arial Black','Helvetica Neue',Arial,sans-serif" font-weight="900" font-size="30" fill="white" opacity="0.95">M</text>
+
+  <!-- Left arm -->
+  <ellipse cx="54" cy="148" rx="14" ry="10" fill="#673ab7" filter="url(#sh)"/>
+  <ellipse cx="51" cy="145" rx="5" ry="3.5" fill="white" opacity="0.08"/>
+  <!-- Right arm -->
+  <ellipse cx="146" cy="148" rx="14" ry="10" fill="#673ab7" filter="url(#sh)"/>
+  <ellipse cx="149" cy="145" rx="5" ry="3.5" fill="white" opacity="0.08"/>
+
+  <!-- Left leg -->
+  <rect x="76" y="184" width="18" height="22" rx="9" fill="url(#lg)"/>
+  <!-- Left foot -->
+  <ellipse cx="85" cy="207" rx="13" ry="7" fill="#4527a0"/>
+  <ellipse cx="82" cy="205" rx="5" ry="2.5" fill="white" opacity="0.08"/>
+  <!-- Right leg -->
+  <rect x="106" y="184" width="18" height="22" rx="9" fill="url(#lg)"/>
+  <!-- Right foot -->
+  <ellipse cx="115" cy="207" rx="13" ry="7" fill="#4527a0"/>
+  <ellipse cx="112" cy="205" rx="5" ry="2.5" fill="white" opacity="0.08"/>
+
+  <!-- Sparkle accents near antenna -->
+  <path d="M68,28 l1.2,-4.5 l1.2,4.5 l4.5,1.2 l-4.5,1.2 l-1.2,4.5 l-1.2,-4.5 l-4.5,-1.2z" fill="#ffab91" opacity="0.6"/>
+  <path d="M136,20 l0.8,-3 l0.8,3 l3,0.8 l-3,0.8 l-0.8,3 l-0.8,-3 l-3,-0.8z" fill="#ffab91" opacity="0.4"/>
 </svg>

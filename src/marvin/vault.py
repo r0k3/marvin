@@ -2,13 +2,12 @@ from __future__ import annotations
 
 import hashlib
 import re
-from datetime import timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import yaml
 
 from .models import MemoryKind, NoteMetadata, NoteRecord, utc_now
-
 
 FRONTMATTER_RE = re.compile(r"^---\n(.*?)\n---\n?", re.DOTALL)
 HEADING_RE = re.compile(r"^#\s+(.+)$", re.MULTILINE)
@@ -75,9 +74,7 @@ class VaultStore:
         candidate = base / f"{stem}.md"
         if not unique or not candidate.exists():
             return candidate
-        digest = hashlib.sha1(
-            f"{title}-{utc_now().isoformat()}".encode("utf-8")
-        ).hexdigest()[:8]
+        digest = hashlib.sha1(f"{title}-{utc_now().isoformat()}".encode()).hexdigest()[:8]
         return base / f"{stem}-{digest}.md"
 
     def write_note(
@@ -119,8 +116,8 @@ class VaultStore:
             "id": metadata.id,
             "kind": metadata.kind.value,
             "title": metadata.title,
-            "created_at": metadata.created_at.astimezone(timezone.utc).isoformat(),
-            "updated_at": metadata.updated_at.astimezone(timezone.utc).isoformat(),
+            "created_at": metadata.created_at.astimezone(UTC).isoformat(),
+            "updated_at": metadata.updated_at.astimezone(UTC).isoformat(),
             "tags": metadata.tags,
             "links": metadata.links,
             "aliases": metadata.aliases,
@@ -137,21 +134,16 @@ class VaultStore:
         raw_text = path.read_text(encoding="utf-8")
         frontmatter, body = self._split_frontmatter(raw_text)
 
-        title = str(
-            frontmatter.get("title") or self._extract_heading(body) or path.stem
-        )
+        title = str(frontmatter.get("title") or self._extract_heading(body) or path.stem)
         kind = self._parse_kind(frontmatter.get("kind") or path.parent.name)
         tags = normalize_tags(frontmatter.get("tags") or [])
-        links = normalize_links(
-            (frontmatter.get("links") or []) + extract_wikilinks(body)
-        )
+        links = normalize_links((frontmatter.get("links") or []) + extract_wikilinks(body))
         aliases = normalize_links(frontmatter.get("aliases") or [])
         source = frontmatter.get("source") or {}
 
         metadata = NoteMetadata(
             id=str(
-                frontmatter.get("id")
-                or hashlib.sha1(str(path).encode("utf-8")).hexdigest()[:12]
+                frontmatter.get("id") or hashlib.sha1(str(path).encode("utf-8")).hexdigest()[:12]
             ),
             kind=kind,
             title=title,
@@ -162,9 +154,7 @@ class VaultStore:
             aliases=aliases,
             source=source,
         )
-        return NoteRecord(
-            path=path, metadata=metadata, body=body.strip(), raw_text=raw_text
-        )
+        return NoteRecord(path=path, metadata=metadata, body=body.strip(), raw_text=raw_text)
 
     def list_notes(self, kind: MemoryKind | None = None) -> list[NoteRecord]:
         roots = [kind] if kind is not None else list(MemoryKind)
@@ -219,9 +209,7 @@ class VaultStore:
         ).strip()
         trimmed_body = body.strip()
         if not trimmed_body.startswith("# "):
-            trimmed_body = (
-                f"# {title}\n\n{trimmed_body}" if trimmed_body else f"# {title}"
-            )
+            trimmed_body = f"# {title}\n\n{trimmed_body}" if trimmed_body else f"# {title}"
 
         related_block = ""
         if links and "## Related" not in trimmed_body:
@@ -246,10 +234,10 @@ class VaultStore:
             normalized = normalized[:-1]
         return MemoryKind(normalized)
 
-    def _parse_datetime(self, value: object) -> object:
+    def _parse_datetime(self, value: object) -> datetime:
         if isinstance(value, str) and value:
             try:
-                return utc_now().fromisoformat(value)
+                return datetime.fromisoformat(value)
             except ValueError:
                 return utc_now()
         return utc_now()

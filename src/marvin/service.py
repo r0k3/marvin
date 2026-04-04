@@ -3,8 +3,10 @@ from __future__ import annotations
 from collections.abc import Iterable
 from pathlib import Path
 
+from .broker import MarvinBroker
 from .config import MarvinSettings
 from .embeddings import EmbeddingService
+from .git import GitManager
 from .index import MemoryIndex, chunk_markdown
 from .models import (
     MemoryKind,
@@ -15,10 +17,7 @@ from .models import (
     SessionContext,
     SyncReport,
 )
-from .vault import VaultStore
-from .broker import MarvinBroker
-from .vault import normalize_links, normalize_tags
-from .git import GitManager
+from .vault import VaultStore, normalize_links, normalize_tags
 
 
 class MarvinService:
@@ -52,16 +51,12 @@ class MarvinService:
         report.scanned = len(notes)
 
         for note in notes:
-            relative_path = str(
-                note.path.relative_to(self.settings.resolved_vault_path)
-            )
+            relative_path = str(note.path.relative_to(self.settings.resolved_vault_path))
             existing_paths.add(relative_path)
             content_hash = self._content_hash(note)
             if self.index.note_is_current(relative_path, content_hash):
                 continue
-            chunks = chunk_markdown(
-                note, self.settings.chunk_size, self.settings.chunk_overlap
-            )
+            chunks = chunk_markdown(note, self.settings.chunk_size, self.settings.chunk_overlap)
             embeddings = self.embedder.embed_texts([chunk.text for chunk in chunks])
             self.index.upsert_note(
                 note, relative_path=relative_path, chunks=chunks, embeddings=embeddings
@@ -209,18 +204,10 @@ class MarvinService:
             query_terms.extend([tech for tech in technologies if tech.strip()])
         query = " ".join(term for term in query_terms if term)
 
-        procedural = self.search(
-            query, kind=MemoryKind.PROCEDURAL, limit=max(2, limit // 2)
-        )
-        semantic = self.search(
-            query, kind=MemoryKind.SEMANTIC, limit=max(2, limit // 2)
-        )
-        reflective = self.search(
-            query, kind=MemoryKind.REFLECTIVE, limit=max(1, limit // 3)
-        )
-        recent_episodes = self.recent(
-            kind=MemoryKind.EPISODIC, limit=max(2, limit // 3)
-        )
+        procedural = self.search(query, kind=MemoryKind.PROCEDURAL, limit=max(2, limit // 2))
+        semantic = self.search(query, kind=MemoryKind.SEMANTIC, limit=max(2, limit // 2))
+        reflective = self.search(query, kind=MemoryKind.REFLECTIVE, limit=max(1, limit // 3))
+        recent_episodes = self.recent(kind=MemoryKind.EPISODIC, limit=max(2, limit // 3))
         guidance = self._derive_guidance(procedural, semantic, reflective)
 
         return SessionContext(
@@ -329,9 +316,7 @@ class MarvinService:
         )
         note = self.vault.read_note(path)
         relative_path = str(path.relative_to(self.settings.resolved_vault_path))
-        chunks = chunk_markdown(
-            note, self.settings.chunk_size, self.settings.chunk_overlap
-        )
+        chunks = chunk_markdown(note, self.settings.chunk_size, self.settings.chunk_overlap)
         embeddings = self.embedder.embed_texts([chunk.text for chunk in chunks])
         self.index.upsert_note(
             note, relative_path=relative_path, chunks=chunks, embeddings=embeddings
@@ -372,13 +357,9 @@ class MarvinService:
         for hit in procedural[:3]:
             guidance.append(f"Follow procedure '{hit.title}' before coding changes.")
         for hit in semantic[:2]:
-            guidance.append(
-                f"Keep '{hit.title}' in view; it contains known project facts."
-            )
+            guidance.append(f"Keep '{hit.title}' in view; it contains known project facts.")
         for hit in reflective[:1]:
-            guidance.append(
-                f"Apply reflection '{hit.title}' to avoid repeating prior mistakes."
-            )
+            guidance.append(f"Apply reflection '{hit.title}' to avoid repeating prior mistakes.")
         return guidance
 
     def _extract_bullets(self, body: str, *, section_name: str) -> list[str]:
@@ -415,9 +396,7 @@ class MarvinService:
         cleaned = [item.strip() for item in items if item.strip()]
         if not cleaned:
             return ""
-        body = "\n".join(
-            f"{index}. {item}" for index, item in enumerate(cleaned, start=1)
-        )
+        body = "\n".join(f"{index}. {item}" for index, item in enumerate(cleaned, start=1))
         return f"## {heading}\n{body}"
 
     def _split_fact(self, fact: str) -> tuple[str, str]:
