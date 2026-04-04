@@ -134,6 +134,9 @@ If we inspect the raw Git history of the vault, we can see exactly how the agent
 Without any manual effort from the user, the agent read a text, answered questions, learned a preference, acquired a new rule, and built a deeply connected, Git-tracked, Obsidian-native knowledge graph. The next time the agent searches for `Hermia`, the RRF hybrid search engine will instantly surface both the narrative facts and the agent's past literary insights.
 
 ### Generated Obsidian Graph
+
+<div style="min-height: 800px;">
+
 ```mermaid
 graph TD;
   Demetrius["Demetrius"]
@@ -191,3 +194,5 @@ graph TD;
   LysanderandHermiaplantofleeAthens --> woods
   LysanderandHermiaplantofleeAthens --> Lysandersaunt
 ```
+
+</div>
