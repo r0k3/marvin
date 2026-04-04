@@ -2,13 +2,16 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
+from .broker import MarvinBroker
 from .config import MarvinSettings
+from .git import GitManager
 from .models import (
     MemoryKind,
     MemoryWriteResult,
@@ -18,10 +21,6 @@ from .models import (
     SyncReport,
 )
 from .service import MarvinService
-
-import os
-from .git import GitManager
-from .broker import MarvinBroker
 
 
 def parse_kind(value: str | None) -> MemoryKind | None:
@@ -52,7 +51,8 @@ def create_app(settings: MarvinSettings) -> FastMCP:
         name="marvin",
         instructions=(
             "Marvin is an Obsidian-native long-term memory system for coding and chat agents. "
-            "Use search before guessing, store durable facts and procedures when the user reveals them, "
+            "Use search before guessing, store durable facts and procedures "
+            "when the user reveals them, "
             "and log meaningful completed work as episodic memory."
         ),
         host=settings.host,
@@ -68,25 +68,15 @@ def create_app(settings: MarvinSettings) -> FastMCP:
     def marvin_sync() -> SyncReport:
         return service.sync()
 
-    @app.tool(
-        description="Search Marvin memory using hybrid semantic and keyword retrieval."
-    )
-    def marvin_search(
-        query: str, kind: str | None = None, limit: int = 6
-    ) -> list[SearchHit]:
+    @app.tool(description="Search Marvin memory using hybrid semantic and keyword retrieval.")
+    def marvin_search(query: str, kind: str | None = None, limit: int = 6) -> list[SearchHit]:
         return service.search(query=query, kind=parse_kind(kind), limit=limit)
 
-    @app.tool(
-        description="Fetch the most recent memories, optionally filtered by memory kind."
-    )
-    def marvin_recent_activity(
-        kind: str | None = None, limit: int = 8
-    ) -> list[SearchHit]:
+    @app.tool(description="Fetch the most recent memories, optionally filtered by memory kind.")
+    def marvin_recent_activity(kind: str | None = None, limit: int = 8) -> list[SearchHit]:
         return service.recent(kind=parse_kind(kind), limit=limit)
 
-    @app.tool(
-        description="Read a single memory note by title, alias, or vault-relative path."
-    )
+    @app.tool(description="Read a single memory note by title, alias, or vault-relative path.")
     def marvin_read_memory(identifier: str) -> dict[str, Any]:
         note = service.get_note(identifier)
         if note is None:
@@ -137,9 +127,7 @@ def create_app(settings: MarvinSettings) -> FastMCP:
             source={"tool": "marvin_store_procedure"},
         )
 
-    @app.tool(
-        description="Log a completed task, event, or session into episodic memory."
-    )
+    @app.tool(description="Log a completed task, event, or session into episodic memory.")
     def marvin_log_episode(
         title: str,
         summary: str,
@@ -172,7 +160,10 @@ def create_app(settings: MarvinSettings) -> FastMCP:
         )
 
     @app.tool(
-        description="Hook-friendly session bootstrap that pulls relevant procedures, facts, and recent episodes."
+        description=(
+            "Hook-friendly session bootstrap that pulls relevant"
+            " procedures, facts, and recent episodes."
+        )
     )
     def marvin_prepare_session(
         task: str,
@@ -185,7 +176,10 @@ def create_app(settings: MarvinSettings) -> FastMCP:
         )
 
     @app.tool(
-        description="Hook-friendly session finalizer that logs an episode and optionally extracts facts, procedures, and reflections."
+        description=(
+            "Hook-friendly session finalizer that logs an episode and"
+            " optionally extracts facts, procedures, and reflections."
+        )
     )
     def marvin_finalize_session(
         title: str,
@@ -209,31 +203,18 @@ def create_app(settings: MarvinSettings) -> FastMCP:
             source={"tool": "marvin_finalize_session"},
         )
 
-    @app.tool(
-        description="Start a new agentic worktree (Git branch) for a specific feature."
-    )
+    @app.tool(description="Start a new agentic worktree (Git branch) for a specific feature.")
     def marvin_start_worktree(branch_name: str) -> str:
-        git_manager = getattr(app, "git_manager", None)
-        if git_manager:
-            return git_manager.create_worktree(branch_name)
-        return "Git not enabled."
+        return git_manager.create_worktree(branch_name)
 
     @app.tool(description="Merge a completed worktree back into main.")
     def marvin_merge_worktree(branch_name: str) -> dict[str, str]:
-        git_manager = getattr(app, "git_manager", None)
-        if git_manager:
-            return git_manager.merge_worktree(branch_name)
-        return {"status": "error", "message": "Git not enabled."}
+        return git_manager.merge_worktree(branch_name)
 
-    @app.tool(
-        description="Trigger background consolidation and graphing via the Brain Worker."
-    )
+    @app.tool(description="Trigger background consolidation and graphing via the Brain Worker.")
     async def marvin_trigger_sleep() -> str:
-        broker = getattr(app, "broker", None)
-        if broker:
-            await broker.publish("memory.sleep", {"trigger": "agent"})
-            return "Consolidation requested. The brain worker is now processing."
-        return "Broker not connected."
+        await broker.publish("memory.sleep", {"trigger": "agent"})
+        return "Consolidation requested. The brain worker is now processing."
 
     return app
 
@@ -273,9 +254,7 @@ async def run_server(settings: MarvinSettings) -> None:
 def make_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run the Marvin MCP server.")
     parser.add_argument("--vault-path", help="Path to the Obsidian-compatible vault")
-    parser.add_argument(
-        "--state-dir", help="Optional path for Marvin's SQLite index and state"
-    )
+    parser.add_argument("--state-dir", help="Optional path for Marvin's SQLite index and state")
     parser.add_argument("--transport", choices=["http", "sse", "stdio"], default="http")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8421)
@@ -284,9 +263,7 @@ def make_arg_parser() -> argparse.ArgumentParser:
         choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
         default="INFO",
     )
-    parser.add_argument(
-        "--embedding-provider", choices=["auto", "fastembed", "hash"], default=None
-    )
+    parser.add_argument("--embedding-provider", choices=["auto", "fastembed", "hash"], default=None)
     parser.add_argument("--embedding-model", default=None)
     return parser
 

@@ -79,7 +79,7 @@ cd marvin
 docker compose up -d
 
 # Pull the local LLM model (one-time setup)
-docker exec -it marvin-ollama-1 ollama pull qwen3:8b
+docker exec -it marvin-ollama-1 ollama pull qwen3.5:9b
 ```
 
 The MCP Gateway is now listening on `http://localhost:8421/sse`.

@@ -21,9 +21,7 @@ class MarvinSettings(BaseSettings):
     transport: Literal["http", "sse", "stdio"] = Field(default="http")
     host: str = Field(default="127.0.0.1")
     port: int = Field(default=8421)
-    log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = Field(
-        default="INFO"
-    )
+    log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = Field(default="INFO")
 
     embedding_provider: Literal["auto", "fastembed", "hash"] = Field(default="auto")
     embedding_model: str = Field(default="BAAI/bge-small-en-v1.5")

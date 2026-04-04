@@ -1,7 +1,8 @@
 from pathlib import Path
+
 from marvin.config import MarvinSettings
-from marvin.service import MarvinService
 from marvin.models import MemoryKind
+from marvin.service import MarvinService
 
 
 def test_service_basic_flow(tmp_path: Path):

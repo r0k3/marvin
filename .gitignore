@@ -23,4 +23,17 @@ site/
 # Local experiments (not published)
 experiments/
 
+# Secrets & credentials
+.env
+.env.*
+*.key
+*.pem
 
+# Runtime data
+marvin_vault/
+*.db
+*.db-shm
+*.db-wal
+
+# Stray session/tool files
+session

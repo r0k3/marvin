@@ -13,8 +13,7 @@ RUN curl -LsSf https://astral.sh/uv/install.sh | env UV_UNMANAGED_INSTALL="/usr/
 WORKDIR /app
 
 # Copy dependency files
-COPY pyproject.toml .
-# We would copy uv.lock if we had one, but we can also just run uv sync
+COPY pyproject.toml uv.lock ./
 # Initialize git in the vault directory preemptively just to avoid issues
 RUN mkdir -p marvin_vault && cd marvin_vault && git init
 

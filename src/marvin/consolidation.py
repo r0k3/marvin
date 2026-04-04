@@ -1,11 +1,13 @@
-from litellm import completion
 import json
+import logging
+
+from litellm import completion
+
+logger = logging.getLogger(__name__)
 
 
 class ConsolidationEngine:
-    def __init__(
-        self, model: str = "ollama/qwen3.5:9b", api_base: str | None = None
-    ):
+    def __init__(self, model: str = "ollama/qwen3.5:9b", api_base: str | None = None):
         self.model = model
         self.api_base = api_base
 
@@ -32,10 +34,10 @@ Output valid JSON ONLY in this exact format:
     {{"concept": "Database Configuration", "fact": "The project uses PostgreSQL with asyncpg."}}
   ],
   "procedural": [
-    {{"title": "Running Migrations", "rule": "Always run alembic upgrade head after changing models."}}
+    {{"title": "Running Migrations", "rule": "Always run alembic upgrade head."}}
   ],
   "reflective": [
-    {{"title": "Database Optimization", "insight": "Running migrations early prevents cascade failures."}}
+    {{"title": "Database Optimization", "insight": "Run migrations early."}}
   ]
 }}
 
@@ -54,5 +56,5 @@ Raw Episodes:
             content = response.choices[0].message.content
             return json.loads(content)
         except Exception as e:
-            print(f"Error during LLM consolidation: {e}")
+            logger.warning("Error during LLM consolidation: %s", e)
             return {"semantic": [], "procedural": []}

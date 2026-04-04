@@ -1,7 +1,11 @@
 import json
-from typing import Callable, Awaitable
+import logging
+from collections.abc import Awaitable, Callable
+
 from nats.aio.client import Client as NATS
 from nats.js.client import JetStreamContext
+
+logger = logging.getLogger(__name__)
 
 
 class MarvinBroker:
@@ -17,9 +21,7 @@ class MarvinBroker:
             # Ensure stream exists
             await self.js.add_stream(name="MARVIN", subjects=["memory.*"])
         except Exception as e:
-            print(
-                f"Warning: Could not connect to NATS ({e}). Async events will be disabled."
-            )
+            logger.warning("Could not connect to NATS (%s). Async events will be disabled.", e)
             self.js = None
 
     async def publish(self, subject: str, payload: dict):
@@ -27,9 +29,7 @@ class MarvinBroker:
             return
         await self.js.publish(subject, json.dumps(payload).encode())
 
-    async def subscribe(
-        self, subject: str, callback: Callable[[dict], Awaitable[None]]
-    ):
+    async def subscribe(self, subject: str, callback: Callable[[dict], Awaitable[None]]):
         if self.js is None:
             return
 
