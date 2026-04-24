@@ -37,7 +37,7 @@ Biological memory isn't just stored; it is *consolidated* while we sleep. Marvin
 - **Deep Semantic Graphing** — Zero-shot entity extraction with automatic `[[Wikilink]]` injection.
 - **Computational Sleep** — Background consolidation via local open-weight models (Ollama).
 - **Hybrid Retrieval** — SQLite-vec (ONNX embeddings) + FTS5 keyword search, combined via Reciprocal Rank Fusion.
-- **Cross-Encoder Reranking** — Optional `bge-reranker-v2-m3` pass (int8 ONNX, ~570 MB) for top-K precision when the query-document interaction matters.
+- **Cross-Encoder Reranking** — Optional `bge-reranker-v2-m3` pass (int8 ONNX, ~570 MB) that lifts LongMemEval-S `NDCG@10` from 88.9% → 94.6% and `MRR` from 89.5% → 95.3% (+13 pp / +11 pp on the hardest multi-session slice).
 - **MCP Gateway** — 13 tools over SSE (port 8421) or stdio. Plug into any MCP-compatible agent.
 - **Reproducible Benchmark** — Built-in [LongMemEval-S](https://arxiv.org/abs/2410.10813) harness so retrieval changes are measured, not vibes (BM25 baseline: `recall_any@5 = 95.6%`).
 
