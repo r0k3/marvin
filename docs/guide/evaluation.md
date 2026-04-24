@@ -88,6 +88,35 @@ hashing backend whose vectors are essentially random. Mixing them into
 RRF *hurts* relative to BM25-only, so production deployments should
 always have `fastembed` (or a real embedding API) installed.
 
+#### Cross-encoder reranker lift
+
+Measured on a 100-question LongMemEval-S subset, BM25 first-stage (`hash`
+embedder), `--rerank-depth 50`, CPU under heavy concurrent load.
+
+| Mode           | R@5       | R@10  | NDCG@10   | MRR       | Median latency |
+| -------------- | --------- | ----- | --------- | --------- | -------------- |
+| BM25           | 96.0%     | 99.0% | 88.9%     | 89.5%     | 1.5 s          |
+| BM25 + rerank  | **98.0%** | 99.0% | **94.6%** | **95.3%** | 125 s          |
+
+Per question type:
+
+| Type (n)                   | R@5 BM25 | R@5 +rerank | NDCG@10 BM25 | NDCG@10 +rerank | MRR BM25 | MRR +rerank |
+| -------------------------- | -------- | ----------- | ------------ | --------------- | -------- | ----------- |
+| single-session-user (n=70) | 97.1%    | 98.6%       | 96.0%        | 98.6%           | 94.7%    | 98.1%       |
+| multi-session (n=30)       | 93.3%    | **96.7%**   | 72.4%        | **85.5%**       | 77.2%    | **88.6%**   |
+
+The reranker's value is concentrated where it should be: the harder
+`multi-session` slice jumps **+13.1 pp NDCG@10** and **+11.4 pp MRR**. On
+the easier single-session slice it still delivers a clean +2.6 pp /
++3.4 pp. Recall@10 was already at ceiling so top-K movement is dominated
+by ordering metrics rather than R@5.
+
+The latency figure reflects the host this run was executed on (load
+average ~40 during the whole run). On an idle workstation the same
+depth-50 rerank runs in single-digit seconds per query, and on a GPU
+it's milliseconds. Production MCP queries only pay the cost when
+`rerank_enabled=true`.
+
 #### Hybrid with `fastembed` on CPU
 
 `fastembed`'s ONNX backend has roughly linear-then-superlinear cost in
@@ -154,10 +183,13 @@ signal cleanly.
 
 Performance: with `bge-reranker-v2-m3` quantized to int8 on CPU, 50
 `(query, chunk)` pairs take roughly 2–4 seconds on an idle workstation
-and much more on a heavily-loaded box. Budget a few minutes of wall time
-per 100 questions in the harness, or pick a smaller model for
-interactive iteration. MCP gateway queries pay the reranker cost once
-per `search()` call and only when `rerank_enabled` is set.
+and much more on a heavily-loaded box (see the
+[measured lift table](#cross-encoder-reranker-lift) for a worst-case
+number). Budget a few minutes of wall time per 100 questions in the
+harness, or pick a smaller model (e.g.
+`Xenova/ms-marco-MiniLM-L-6-v2`) for interactive iteration. MCP gateway
+queries pay the reranker cost once per `search()` call and only when
+`rerank_enabled` is set.
 
 ### Output
 
