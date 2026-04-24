@@ -328,7 +328,7 @@ class MemoryIndex:
         return self.conn.execute(sql, params).fetchall()
 
     def _fts_hits(self, *, query: str, limit: int, kind: MemoryKind | None) -> list[sqlite3.Row]:
-        cleaned = " ".join(part for part in query.replace('"', " ").split() if part)
+        cleaned = _sanitize_fts_query(query)
         if not cleaned:
             return []
         sql = """
@@ -441,3 +441,27 @@ class MemoryIndex:
 def _excerpt(text: str, limit: int = 320) -> str:
     normalized = " ".join(text.split())
     return normalized[:limit] + ("..." if len(normalized) > limit else "")
+
+
+# FTS5 reserves these characters for query syntax (phrase, prefix, boolean,
+# column filter, grouping, NEAR). Stripping them keeps end-user queries safe
+# without requiring callers to escape — we only want bag-of-words matching.
+_FTS_SPECIAL = set('"*+-():^?!.,;')
+
+
+def _sanitize_fts_query(query: str) -> str:
+    """Turn a free-form query into a safe FTS5 OR-of-phrases expression.
+
+    Default FTS5 uses AND semantics, which is far too strict for
+    natural-language questions ("how do I log in Python?" would only match
+    documents containing every word). We split on whitespace, drop FTS5
+    operators, quote each token (so it survives reserved keywords like
+    ``AND``/``OR``/``NEAR``), and join with ``OR`` so the ranker scores by
+    how many query terms each document contains.
+    """
+    chars = [" " if ch in _FTS_SPECIAL else ch for ch in query]
+    tokens = [tok for tok in "".join(chars).split() if tok]
+    if not tokens:
+        return ""
+    quoted = [f'"{tok}"' for tok in tokens]
+    return " OR ".join(quoted)
