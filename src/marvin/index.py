@@ -252,6 +252,8 @@ class MemoryIndex:
         query_embedding: np.ndarray,
         limit: int,
         kind: MemoryKind | None = None,
+        *,
+        include_chunk_text: bool = False,
     ) -> list[SearchHit]:
         vec_hits = self._vector_hits(
             query_embedding=query_embedding, limit=max(limit * 5, 20), kind=kind
@@ -295,6 +297,7 @@ class MemoryIndex:
                     excerpt=_excerpt(row["text"]),
                     tags=json.loads(row["tags_json"] or "[]"),
                     links=json.loads(row["links_json"] or "[]"),
+                    chunk_text=row["text"] if include_chunk_text else None,
                 )
             )
         return hits

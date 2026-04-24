@@ -69,6 +69,10 @@ class SearchHit(BaseModel):
     excerpt: str
     tags: list[str] = Field(default_factory=list)
     links: list[str] = Field(default_factory=list)
+    # Full text of the best-matching chunk. Optional and populated only when
+    # a caller sets ``include_chunk_text=True`` on a search; reranking needs
+    # the full window (excerpts are truncated for display).
+    chunk_text: str | None = None
 
 
 class SyncReport(BaseModel):

@@ -27,6 +27,12 @@ class MarvinSettings(BaseSettings):
     embedding_model: str = Field(default="BAAI/bge-small-en-v1.5")
     embedding_dimensions: int = Field(default=384)
 
+    rerank_enabled: bool = Field(default=False)
+    rerank_provider: Literal["auto", "fastembed", "none"] = Field(default="auto")
+    rerank_model: str = Field(default="BAAI/bge-reranker-v2-m3")
+    rerank_depth: int = Field(default=50)
+    rerank_max_chars: int = Field(default=1024)
+
     chunk_size: int = Field(default=1200)
     chunk_overlap: int = Field(default=200)
     search_limit: int = Field(default=6)

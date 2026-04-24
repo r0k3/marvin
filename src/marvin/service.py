@@ -17,6 +17,7 @@ from .models import (
     SessionContext,
     SyncReport,
 )
+from .reranker import RerankerService
 from .vault import VaultStore, normalize_links, normalize_tags
 
 
@@ -36,6 +37,15 @@ class MarvinService:
             provider=self.settings.embedding_provider,
             model_name=self.settings.embedding_model,
             dimensions=self.settings.embedding_dimensions,
+        )
+        self.reranker = RerankerService(
+            provider=(
+                self.settings.rerank_provider
+                if self.settings.rerank_enabled
+                else "none"
+            ),
+            model_name=self.settings.rerank_model,
+            max_chars=self.settings.rerank_max_chars,
         )
         self.index = MemoryIndex(
             self.settings.index_path, dimensions=self.settings.embedding_dimensions
@@ -70,11 +80,37 @@ class MarvinService:
         self, query: str, *, kind: MemoryKind | None = None, limit: int | None = None
     ) -> list[SearchHit]:
         self.sync()
+        effective_limit = limit or self.settings.search_limit
         query_embedding = self.embedder.embed_text(query)
+        if self.settings.rerank_enabled:
+            # Over-fetch with the hybrid ranker, then let the cross-encoder
+            # reorder the top pool before returning the final top-K. We ask
+            # the index for the full chunk text (not just excerpt) so the
+            # reranker has the real matched window to score, and strip it
+            # on return to keep the wire payload compact.
+            pool_size = max(effective_limit, self.settings.rerank_depth)
+            pool = self.index.hybrid_search(
+                query=query,
+                query_embedding=query_embedding,
+                limit=pool_size,
+                kind=kind,
+                include_chunk_text=True,
+            )
+            docs = [(hit.chunk_text or hit.excerpt or hit.title) for hit in pool]
+            scores = self.reranker.score(query, docs)
+            order = sorted(
+                range(len(pool)), key=lambda i: (-scores[i], i)
+            )[:effective_limit]
+            return [
+                pool[i].model_copy(
+                    update={"score": round(scores[i], 6), "chunk_text": None}
+                )
+                for i in order
+            ]
         return self.index.hybrid_search(
             query=query,
             query_embedding=query_embedding,
-            limit=limit or self.settings.search_limit,
+            limit=effective_limit,
             kind=kind,
         )
 
