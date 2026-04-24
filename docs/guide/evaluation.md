@@ -1,0 +1,138 @@
+# Evaluation
+
+Marvin ships with a reproducible retrieval benchmark so changes to chunking,
+embeddings, ranking, or fusion can be measured against an external
+reference rather than vibes.
+
+## LongMemEval-S
+
+[LongMemEval](https://arxiv.org/abs/2410.10813) (ICLR 2025) is a
+public benchmark for long-term chat memory. The "small" variant
+(`LongMemEval-S`) contains 500 questions, each paired with a haystack
+of ~50 prior chat sessions; the gold answer is contained in one or two
+of those sessions. We use the
+[`xiaowu0162/longmemeval-cleaned`](https://huggingface.co/datasets/xiaowu0162/longmemeval-cleaned)
+release, the same one that `agentmemory` reports against, so numbers are
+directly comparable.
+
+The harness measures **retrieval only**: for each question we build a
+fresh in-memory index from that question's haystack, run a search with
+the question text, and check whether any gold session id appears in the
+top-K results.
+
+### Metrics
+
+For each question (and aggregated across all questions):
+
+- **`recall_any@K`** — 1.0 if any gold session is in the top-K results.
+- **`NDCG@10`** — normalised DCG with binary session-level relevance.
+- **`MRR`** — reciprocal rank of the first gold session.
+
+The published `agentmemory` headline is `recall_any@5`.
+
+### Quick start
+
+```bash
+# 1. Download the cleaned dataset (~270 MB, one-off).
+python scripts/download_longmemeval.py
+
+# 2. Run the BM25 baseline on all 500 questions (~1 minute).
+python -m marvin.eval \
+    --dataset experiments/data/longmemeval_s_cleaned.json \
+    --mode bm25 \
+    --output experiments/results/bm25.json
+
+# 3. Run hybrid retrieval (BM25 + dense vectors via fastembed).
+python -m marvin.eval \
+    --dataset experiments/data/longmemeval_s_cleaned.json \
+    --mode hybrid \
+    --output experiments/results/hybrid.json
+
+# 4. Quick sanity check without downloading any embedding model.
+python -m marvin.eval --dataset PATH --mode bm25 \
+    --embedding-provider hash --limit 20
+```
+
+### Modes
+
+| Mode     | Index streams                  | Notes                              |
+| -------- | ------------------------------ | ---------------------------------- |
+| `bm25`   | SQLite FTS5 only               | Fastest; deterministic; no model.  |
+| `vector` | `sqlite-vec` only              | Pure dense retrieval ablation.     |
+| `hybrid` | FTS5 + sqlite-vec, RRF fused   | Default. Mirrors `service.search`. |
+
+### Baseline numbers
+
+Run on commit `feature/eval-longmemeval`, multi-core CPU, no GPU,
+default chunking (1200 / 200), full LongMemEval-S (500 questions).
+
+| Mode   | Embedder            | R@5    | R@10  | R@20  | NDCG@10 | MRR   | Wall   |
+| ------ | ------------------- | ------ | ----- | ----- | ------- | ----- | ------ |
+| BM25   | n/a (FTS5)          | **95.6%** | 98.2% | 99.2% | 87.3%   | 89.2% | 55 s   |
+| Hybrid | hash (deterministic)| 88.8%  | 92.2% | 98.2% | 74.7%   | 77.1% | 73 s   |
+
+For reference, `agentmemory` reports `recall_any@5 = 95.2%` on the same
+dataset using BM25 + dense vectors with cross-encoder reranking. Marvin's
+BM25 alone matches that headline number; closing the remaining gap on the
+hardest question types (especially `single-session-preference`) is the
+target for follow-up work on dense retrieval and reranking.
+
+The "hybrid + hash" row is informative rather than aspirational: when the
+real embedder isn't available, Marvin currently falls back to a feature-
+hashing backend whose vectors are essentially random. Mixing them into
+RRF *hurts* relative to BM25-only, so production deployments should
+always have `fastembed` (or a real embedding API) installed.
+
+#### Hybrid with `fastembed` on CPU
+
+`fastembed`'s ONNX backend has roughly linear-then-superlinear cost in
+sequence length on CPU. With the default 512-char embedding cap, a full
+500-question hybrid run takes several hours on a typical workstation.
+For interactive iteration:
+
+- Cap embedding text aggressively: `--max-embed-chars 128` is ~5× faster
+  than the default 512 with little recall impact in our spot checks.
+- Use `--limit N` to evaluate on a subset.
+- Use `--mode bm25` for changes that don't touch dense retrieval.
+
+Reducing this cost is on the roadmap (smaller models, batched embedding
+service, optional GPU/Metal backends).
+
+### Output
+
+The CLI prints a per-question-type breakdown and writes a JSON dump:
+
+```json
+{
+  "mode": "bm25",
+  "embedding_provider": "hash",
+  "questions": 500,
+  "recall_at_5": 0.956,
+  "recall_at_10": 0.982,
+  "ndcg_at_10": 0.873,
+  "mrr": 0.892,
+  "median_latency_ms": 111.1,
+  "total_seconds": 55.4,
+  "per_type": { "...": "..." },
+  "per_question": [ "...", "..." ]
+}
+```
+
+`per_question` includes the retrieved session ids, gold ids, and per-question
+metrics — useful for digging into failure cases.
+
+### Programmatic API
+
+```python
+from pathlib import Path
+from marvin.embeddings import EmbeddingService
+from marvin.eval.longmemeval import load_dataset, run_benchmark
+
+entries = load_dataset(Path("experiments/data/longmemeval_s_cleaned.json"))
+summary = run_benchmark(
+    entries[:50],
+    mode="hybrid",
+    embedder=EmbeddingService(),
+)
+print(summary.recall_at_5, summary.mrr)
+```

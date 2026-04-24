@@ -64,5 +64,6 @@ nav:
       - Getting Started: guide/getting-started.md
       - Agent Skills: guide/skills.md
       - Case Study: guide/case-study.md
+      - Evaluation: guide/evaluation.md
   - Reference:
       - MCP Tools: reference/mcp-tools.md

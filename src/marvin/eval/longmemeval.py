@@ -1,0 +1,508 @@
+"""LongMemEval-S retrieval benchmark for Marvin.
+
+Implements the same protocol used by `agentmemory`'s
+``benchmark/longmemeval-bench.ts`` so numbers are comparable:
+
+- Build a fresh in-memory index per question from the question's
+  ``haystack_sessions`` (one note per session).
+- Query the index with the question text.
+- Compute ``recall_any@K`` (does ANY gold session appear in top-K?),
+  ``NDCG@10``, and ``MRR`` over the retrieved session ids.
+- Filter out abstention question types because they have no gold sessions
+  to recall.
+
+Reference:
+    Wu et al. *LongMemEval: Benchmarking Chat Assistants on Long-Term
+    Interactive Memory.* ICLR 2025. https://arxiv.org/abs/2410.10813
+    Cleaned dataset: https://huggingface.co/datasets/xiaowu0162/longmemeval-cleaned
+"""
+
+from __future__ import annotations
+
+import json
+import math
+import sqlite3
+import time
+from collections import defaultdict
+from collections.abc import Iterable, Sequence
+from contextlib import contextmanager
+from pathlib import Path
+from typing import Literal
+
+from pydantic import BaseModel, Field
+
+from marvin.embeddings import EmbeddingService
+from marvin.index import MemoryIndex, chunk_markdown
+from marvin.models import MemoryKind, NoteMetadata, NoteRecord, utc_now
+
+Mode = Literal["bm25", "vector", "hybrid"]
+
+ABSTENTION_TYPES: frozenset[str] = frozenset(
+    {
+        "single-session-user_abs",
+        "multi-session_abs",
+        "knowledge-update_abs",
+        "temporal-reasoning_abs",
+    }
+)
+
+
+class LongMemEvalEntry(BaseModel):
+    """One question from LongMemEval-S.
+
+    The dataset is heterogeneously typed in the wild (``answer`` is sometimes
+    a string, an int, or a list). We accept ``Any`` for fields we never act
+    on so loading never fails on a stray entry.
+    """
+
+    question_id: str
+    question_type: str
+    question: str
+    question_date: str = ""
+    answer: object = ""
+    answer_session_ids: list[str] = Field(default_factory=list)
+    haystack_dates: list[str] = Field(default_factory=list)
+    haystack_session_ids: list[str]
+    haystack_sessions: list[list[dict[str, object]]]
+
+
+class QuestionResult(BaseModel):
+    """Per-question retrieval result."""
+
+    question_id: str
+    question_type: str
+    retrieved_session_ids: list[str]
+    gold_session_ids: list[str]
+    recall_at_5: float
+    recall_at_10: float
+    recall_at_20: float
+    ndcg_at_10: float
+    mrr: float
+    latency_ms: float
+
+
+class TypeBreakdown(BaseModel):
+    count: int
+    recall_at_5: float
+    recall_at_10: float
+    ndcg_at_10: float
+    mrr: float
+
+
+class BenchSummary(BaseModel):
+    """Aggregate results of a benchmark run."""
+
+    mode: Mode
+    embedding_provider: str
+    embedding_model: str
+    questions: int
+    recall_at_5: float
+    recall_at_10: float
+    recall_at_20: float
+    ndcg_at_10: float
+    mrr: float
+    median_latency_ms: float
+    total_seconds: float
+    per_type: dict[str, TypeBreakdown]
+    per_question: list[QuestionResult] = Field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# Metric primitives. Keep these pure so they are trivial to test.
+# ---------------------------------------------------------------------------
+
+
+def recall_any_at_k(retrieved: Sequence[str], gold: Iterable[str], k: int) -> float:
+    """Return 1.0 if any gold id appears in the first ``k`` retrieved ids."""
+    top_k = set(retrieved[:k])
+    return 1.0 if any(g in top_k for g in gold) else 0.0
+
+
+def _dcg(relevances: Sequence[bool], k: int) -> float:
+    total = 0.0
+    for i, rel in enumerate(relevances[:k]):
+        if rel:
+            total += 1.0 / math.log2(i + 2)
+    return total
+
+
+def ndcg_at_k(retrieved: Sequence[str], gold: Iterable[str], k: int) -> float:
+    """Normalised DCG at ``k`` over binary session-level relevance."""
+    gold_set = set(gold)
+    if not gold_set:
+        return 0.0
+    rels = [r in gold_set for r in retrieved[:k]]
+    ideal_count = min(k, len(gold_set))
+    ideal = _dcg([True] * ideal_count, k)
+    if ideal == 0.0:
+        return 0.0
+    return _dcg(rels, k) / ideal
+
+
+def mean_reciprocal_rank(retrieved: Sequence[str], gold: Iterable[str]) -> float:
+    """Reciprocal rank of the first gold session in ``retrieved``."""
+    gold_set = set(gold)
+    for i, sid in enumerate(retrieved):
+        if sid in gold_set:
+            return 1.0 / (i + 1)
+    return 0.0
+
+
+# ---------------------------------------------------------------------------
+# Dataset loading.
+# ---------------------------------------------------------------------------
+
+
+def load_dataset(
+    path: Path, *, include_abstention: bool = False
+) -> list[LongMemEvalEntry]:
+    """Load LongMemEval-S JSON file into ``LongMemEvalEntry`` objects."""
+    raw = json.loads(Path(path).read_text(encoding="utf-8"))
+    if not isinstance(raw, list):
+        raise ValueError(f"Expected JSON list, got {type(raw).__name__}")
+
+    entries = [LongMemEvalEntry.model_validate(item) for item in raw]
+    if include_abstention:
+        return entries
+    return [e for e in entries if e.question_type not in ABSTENTION_TYPES]
+
+
+# ---------------------------------------------------------------------------
+# Synthetic note construction. One LongMemEval session = one Marvin note.
+# ---------------------------------------------------------------------------
+
+
+def _format_turns(turns: Sequence[dict[str, object]]) -> str:
+    parts: list[str] = []
+    for turn in turns:
+        role = str(turn.get("role", "user"))
+        content = str(turn.get("content", ""))
+        parts.append(f"{role}: {content}")
+    return "\n".join(parts)
+
+
+def _session_to_note(
+    session_id: str,
+    turns: Sequence[dict[str, object]],
+    *,
+    vault_root: Path,
+) -> NoteRecord:
+    body = _format_turns(turns)
+    title = f"Session {session_id}"
+    raw_text = f"# {title}\n\n{body}"
+    metadata = NoteMetadata(
+        kind=MemoryKind.EPISODIC,
+        title=title,
+        created_at=utc_now(),
+        updated_at=utc_now(),
+    )
+    return NoteRecord(
+        path=vault_root / f"{session_id}.md",
+        metadata=metadata,
+        body=body,
+        raw_text=raw_text,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Single-mode retrieval helpers. They mirror MemoryIndex.hybrid_search but
+# expose individual streams so we can measure ablations.
+# ---------------------------------------------------------------------------
+
+
+def _rank_by_path(
+    rows: Sequence[sqlite3.Row], score_fn
+) -> list[tuple[str, float]]:
+    """Aggregate per-chunk rows into per-note ranking using ``max`` pooling.
+
+    ``score_fn`` maps ``(rank, row)`` to a score; we keep the best score
+    per relative_path then sort descending.
+    """
+    best: dict[str, float] = {}
+    for rank, row in enumerate(rows, start=1):
+        score = score_fn(rank, row)
+        path = row["relative_path"]
+        prev = best.get(path)
+        if prev is None or score > prev:
+            best[path] = score
+    return sorted(best.items(), key=lambda x: x[1], reverse=True)
+
+
+def _bm25_ranking(
+    index: MemoryIndex, query: str, depth: int
+) -> list[tuple[str, float]]:
+    rows = index._fts_hits(query=query, limit=depth, kind=None)
+    if not rows:
+        return []
+    # FTS rank is "lower is better" so invert for max pooling.
+    return _rank_by_path(rows, lambda rank, row: -float(row["rank"]))
+
+
+def _vector_ranking(
+    index: MemoryIndex, query_embedding, depth: int
+) -> list[tuple[str, float]]:
+    rows = index._vector_hits(
+        query_embedding=query_embedding, limit=depth, kind=None
+    )
+    if not rows:
+        return []
+    return _rank_by_path(rows, lambda rank, row: -float(row["distance"]))
+
+
+# ---------------------------------------------------------------------------
+# Bench runner.
+# ---------------------------------------------------------------------------
+
+
+@contextmanager
+def _ephemeral_index(dimensions: int):
+    """In-memory MemoryIndex that gets torn down on exit."""
+    index = MemoryIndex(Path(":memory:"), dimensions=dimensions)
+    try:
+        yield index
+    finally:
+        index.close()
+
+
+def _run_question(
+    entry: LongMemEvalEntry,
+    *,
+    mode: Mode,
+    embedder: EmbeddingService,
+    chunk_size: int,
+    chunk_overlap: int,
+    top_k: int,
+    vault_root: Path,
+    max_embed_chars: int,
+) -> QuestionResult:
+    import numpy as np
+
+    needs_vectors = mode in {"vector", "hybrid"}
+    started = time.perf_counter()
+
+    with _ephemeral_index(embedder.dimensions) as index:
+        # Build chunks for every session up front, then embed in one big
+        # batch. fastembed has substantial per-call overhead and
+        # superlinear scaling on long inputs, so this is materially faster
+        # than embedding session-by-session.
+        per_session_chunks: list[tuple[str, NoteRecord, list]] = []
+        for session_id, turns in zip(
+            entry.haystack_session_ids,
+            entry.haystack_sessions,
+            strict=True,
+        ):
+            note = _session_to_note(session_id, turns, vault_root=vault_root)
+            chunks = chunk_markdown(note, chunk_size, chunk_overlap)
+            per_session_chunks.append((session_id, note, chunks))
+
+        if needs_vectors:
+            flat_texts = [
+                c.text[:max_embed_chars]
+                for _, _, chunks in per_session_chunks
+                for c in chunks
+            ]
+            flat_embeds = embedder.embed_texts(flat_texts)
+        else:
+            flat_embeds = None
+
+        cursor = 0
+        for session_id, note, chunks in per_session_chunks:
+            n = len(chunks)
+            if needs_vectors:
+                assert flat_embeds is not None
+                embeddings = flat_embeds[cursor : cursor + n]
+            else:
+                embeddings = [
+                    np.zeros(embedder.dimensions, dtype="float32")
+                    for _ in chunks
+                ]
+            cursor += n
+            index.upsert_note(
+                note,
+                relative_path=session_id,
+                chunks=chunks,
+                embeddings=embeddings,
+            )
+
+        if mode == "hybrid":
+            query_embedding = embedder.embed_text(entry.question)
+            hits = index.hybrid_search(
+                query=entry.question,
+                query_embedding=query_embedding,
+                limit=top_k,
+            )
+            retrieved = [hit.path for hit in hits]
+        elif mode == "bm25":
+            ranking = _bm25_ranking(index, entry.question, depth=max(top_k * 5, 20))
+            retrieved = [path for path, _ in ranking[:top_k]]
+        else:  # vector
+            query_embedding = embedder.embed_text(entry.question)
+            ranking = _vector_ranking(
+                index, query_embedding, depth=max(top_k * 5, 20)
+            )
+            retrieved = [path for path, _ in ranking[:top_k]]
+
+    elapsed_ms = (time.perf_counter() - started) * 1000.0
+    gold = entry.answer_session_ids
+    return QuestionResult(
+        question_id=entry.question_id,
+        question_type=entry.question_type,
+        retrieved_session_ids=retrieved,
+        gold_session_ids=gold,
+        recall_at_5=recall_any_at_k(retrieved, gold, 5),
+        recall_at_10=recall_any_at_k(retrieved, gold, 10),
+        recall_at_20=recall_any_at_k(retrieved, gold, 20),
+        ndcg_at_10=ndcg_at_k(retrieved, gold, 10),
+        mrr=mean_reciprocal_rank(retrieved, gold),
+        latency_ms=elapsed_ms,
+    )
+
+
+def run_benchmark(
+    entries: Sequence[LongMemEvalEntry],
+    *,
+    mode: Mode = "hybrid",
+    embedder: EmbeddingService | None = None,
+    chunk_size: int = 1200,
+    chunk_overlap: int = 200,
+    top_k: int = 20,
+    max_embed_chars: int = 512,
+    progress: int = 0,
+) -> BenchSummary:
+    """Run the benchmark on ``entries`` and return an aggregated summary.
+
+    Args:
+        entries: Pre-filtered list of LongMemEval entries.
+        mode: One of ``"bm25"``, ``"vector"``, ``"hybrid"``.
+        embedder: Embedding service. Required for ``vector`` and ``hybrid``;
+            if omitted, a default :class:`EmbeddingService` is constructed.
+        chunk_size, chunk_overlap: Forwarded to :func:`chunk_markdown`.
+        top_k: How many retrieved sessions to keep per question.
+        max_embed_chars: Truncate each chunk to this many characters before
+            embedding. Matches the agentmemory benchmark protocol (512) and
+            keeps fastembed's superlinear long-input cost in check; FTS5
+            still indexes the full chunk text.
+        progress: If > 0, print a one-line progress update every N questions.
+    """
+    if embedder is None:
+        embedder = EmbeddingService()
+
+    started = time.perf_counter()
+    vault_root = Path("/tmp/marvin-eval-vault")  # never written to disk
+    results: list[QuestionResult] = []
+
+    for i, entry in enumerate(entries, start=1):
+        result = _run_question(
+            entry,
+            mode=mode,
+            embedder=embedder,
+            chunk_size=chunk_size,
+            chunk_overlap=chunk_overlap,
+            top_k=top_k,
+            vault_root=vault_root,
+            max_embed_chars=max_embed_chars,
+        )
+        results.append(result)
+
+        if progress and i % progress == 0:
+            running = sum(r.recall_at_5 for r in results) / len(results)
+            print(
+                f"  [{i:>4}/{len(entries)}]  running R@5: {running * 100:5.1f}%",
+                flush=True,
+            )
+
+    elapsed = time.perf_counter() - started
+    return _summarize(
+        mode=mode, embedder=embedder, results=results, elapsed_seconds=elapsed
+    )
+
+
+def _summarize(
+    *,
+    mode: Mode,
+    embedder: EmbeddingService,
+    results: list[QuestionResult],
+    elapsed_seconds: float,
+) -> BenchSummary:
+    n = len(results)
+    if n == 0:
+        empty = BenchSummary(
+            mode=mode,
+            embedding_provider=embedder.backend_name,
+            embedding_model=embedder.model_name,
+            questions=0,
+            recall_at_5=0.0,
+            recall_at_10=0.0,
+            recall_at_20=0.0,
+            ndcg_at_10=0.0,
+            mrr=0.0,
+            median_latency_ms=0.0,
+            total_seconds=elapsed_seconds,
+            per_type={},
+        )
+        return empty
+
+    by_type: dict[str, list[QuestionResult]] = defaultdict(list)
+    for r in results:
+        by_type[r.question_type].append(r)
+
+    per_type = {
+        qtype: TypeBreakdown(
+            count=len(rs),
+            recall_at_5=sum(r.recall_at_5 for r in rs) / len(rs),
+            recall_at_10=sum(r.recall_at_10 for r in rs) / len(rs),
+            ndcg_at_10=sum(r.ndcg_at_10 for r in rs) / len(rs),
+            mrr=sum(r.mrr for r in rs) / len(rs),
+        )
+        for qtype, rs in by_type.items()
+    }
+
+    sorted_lat = sorted(r.latency_ms for r in results)
+    median_lat = sorted_lat[n // 2]
+
+    return BenchSummary(
+        mode=mode,
+        embedding_provider=embedder.backend_name,
+        embedding_model=embedder.model_name,
+        questions=n,
+        recall_at_5=sum(r.recall_at_5 for r in results) / n,
+        recall_at_10=sum(r.recall_at_10 for r in results) / n,
+        recall_at_20=sum(r.recall_at_20 for r in results) / n,
+        ndcg_at_10=sum(r.ndcg_at_10 for r in results) / n,
+        mrr=sum(r.mrr for r in results) / n,
+        median_latency_ms=median_lat,
+        total_seconds=elapsed_seconds,
+        per_type=per_type,
+        per_question=results,
+    )
+
+
+def format_summary(summary: BenchSummary) -> str:
+    """Pretty-print a summary as a multi-line string for console output."""
+    lines: list[str] = []
+    lines.append(f"=== LongMemEval-S Results ({summary.mode}) ===")
+    lines.append(
+        f"Embedder: {summary.embedding_provider} ({summary.embedding_model})"
+    )
+    lines.append(f"Questions: {summary.questions}")
+    lines.append(f"recall_any@5:  {summary.recall_at_5 * 100:5.1f}%")
+    lines.append(f"recall_any@10: {summary.recall_at_10 * 100:5.1f}%")
+    lines.append(f"recall_any@20: {summary.recall_at_20 * 100:5.1f}%")
+    lines.append(f"NDCG@10:       {summary.ndcg_at_10 * 100:5.1f}%")
+    lines.append(f"MRR:           {summary.mrr * 100:5.1f}%")
+    lines.append(
+        f"Median latency: {summary.median_latency_ms:.1f}ms  "
+        f"(total {summary.total_seconds:.1f}s)"
+    )
+    if summary.per_type:
+        lines.append("")
+        lines.append("By question type:")
+        for qtype in sorted(summary.per_type):
+            br = summary.per_type[qtype]
+            lines.append(
+                f"  {qtype:<32}  R@5 {br.recall_at_5 * 100:5.1f}%  "
+                f"R@10 {br.recall_at_10 * 100:5.1f}%  "
+                f"NDCG@10 {br.ndcg_at_10 * 100:5.1f}%  "
+                f"MRR {br.mrr * 100:5.1f}%  (n={br.count})"
+            )
+    return "\n".join(lines)
