@@ -34,6 +34,7 @@ from pydantic import BaseModel, Field
 from marvin.embeddings import EmbeddingService
 from marvin.index import MemoryIndex, chunk_markdown
 from marvin.models import MemoryKind, NoteMetadata, NoteRecord, utc_now
+from marvin.reranker import RerankerService
 
 Mode = Literal["bm25", "vector", "hybrid"]
 
@@ -95,6 +96,9 @@ class BenchSummary(BaseModel):
     mode: Mode
     embedding_provider: str
     embedding_model: str
+    reranker_provider: str | None = None
+    reranker_model: str | None = None
+    rerank_depth: int | None = None
     questions: int
     recall_at_5: float
     recall_at_10: float
@@ -249,6 +253,62 @@ def _vector_ranking(
     return _rank_by_path(rows, lambda rank, row: -float(row["distance"]))
 
 
+def _hybrid_chunk_rows(
+    index: MemoryIndex,
+    query: str,
+    query_embedding,
+    depth: int,
+) -> list[tuple[sqlite3.Row, float]]:
+    """Chunk-level hybrid retrieval: RRF fuse FTS + vector at the chunk level.
+
+    Unlike :meth:`MemoryIndex.hybrid_search`, this does *not* max-pool to
+    notes. It returns the top ``depth`` chunk rows with their RRF scores
+    so a reranker can operate on the exact snippet that matched.
+    """
+    vec_rows = index._vector_hits(
+        query_embedding=query_embedding, limit=depth, kind=None
+    )
+    fts_rows = index._fts_hits(query=query, limit=depth, kind=None)
+    scores: dict[int, float] = defaultdict(float)
+    details: dict[int, sqlite3.Row] = {}
+    rrf_k = 60.0
+    for rank, row in enumerate(vec_rows, start=1):
+        cid = row["chunk_id"]
+        scores[cid] += 1.0 / (rrf_k + rank)
+        details[cid] = row
+    for rank, row in enumerate(fts_rows, start=1):
+        cid = row["chunk_id"]
+        scores[cid] += 1.0 / (rrf_k + rank)
+        details[cid] = row
+    ranked = sorted(scores.items(), key=lambda x: -x[1])[:depth]
+    return [(details[cid], score) for cid, score in ranked]
+
+
+def _chunk_rows_for_mode(
+    index: MemoryIndex,
+    mode: Mode,
+    query: str,
+    query_embedding,
+    depth: int,
+) -> list[sqlite3.Row]:
+    """Top ``depth`` chunk rows for a given mode (pre-aggregation).
+
+    Callers that rerank operate on these rows directly and max-pool to
+    sessions afterwards. Passing chunk text (not session bodies) to the
+    reranker is essential: the cross-encoder only sees 512 tokens, so
+    giving it a naive prefix of a long session usually misses the signal.
+    """
+    if mode == "hybrid":
+        return [row for row, _ in _hybrid_chunk_rows(
+            index, query, query_embedding, depth
+        )]
+    if mode == "bm25":
+        return index._fts_hits(query=query, limit=depth, kind=None)
+    return index._vector_hits(
+        query_embedding=query_embedding, limit=depth, kind=None
+    )
+
+
 # ---------------------------------------------------------------------------
 # Bench runner.
 # ---------------------------------------------------------------------------
@@ -274,6 +334,8 @@ def _run_question(
     top_k: int,
     vault_root: Path,
     max_embed_chars: int,
+    reranker: RerankerService | None = None,
+    rerank_depth: int = 50,
 ) -> QuestionResult:
     import numpy as np
 
@@ -324,23 +386,47 @@ def _run_question(
                 embeddings=embeddings,
             )
 
-        if mode == "hybrid":
-            query_embedding = embedder.embed_text(entry.question)
-            hits = index.hybrid_search(
+        query_embedding = (
+            embedder.embed_text(entry.question) if needs_vectors else None
+        )
+
+        if reranker is not None:
+            # Rerank at chunk granularity (the reranker input window is
+            # only 512 tokens, so session-body prefixes miss the signal in
+            # long conversations). We fetch more chunks than rerank_depth
+            # sessions because several chunks may belong to the same
+            # session; max-pooling after scoring collapses them back.
+            chunk_rows = _chunk_rows_for_mode(
+                index=index,
+                mode=mode,
                 query=entry.question,
                 query_embedding=query_embedding,
-                limit=top_k,
+                depth=max(rerank_depth, top_k * 3),
             )
-            retrieved = [hit.path for hit in hits]
-        elif mode == "bm25":
-            ranking = _bm25_ranking(index, entry.question, depth=max(top_k * 5, 20))
-            retrieved = [path for path, _ in ranking[:top_k]]
-        else:  # vector
-            query_embedding = embedder.embed_text(entry.question)
-            ranking = _vector_ranking(
-                index, query_embedding, depth=max(top_k * 5, 20)
+            retrieved = _rerank_chunks_to_sessions(
+                query=entry.question,
+                chunk_rows=chunk_rows,
+                reranker=reranker,
+                top_k=top_k,
             )
-            retrieved = [path for path, _ in ranking[:top_k]]
+        else:
+            if mode == "hybrid":
+                hits = index.hybrid_search(
+                    query=entry.question,
+                    query_embedding=query_embedding,
+                    limit=top_k,
+                )
+                retrieved = [hit.path for hit in hits]
+            elif mode == "bm25":
+                ranking = _bm25_ranking(
+                    index, entry.question, depth=max(top_k * 5, 20)
+                )
+                retrieved = [path for path, _ in ranking[:top_k]]
+            else:  # vector
+                ranking = _vector_ranking(
+                    index, query_embedding, depth=max(top_k * 5, 20)
+                )
+                retrieved = [path for path, _ in ranking[:top_k]]
 
     elapsed_ms = (time.perf_counter() - started) * 1000.0
     gold = entry.answer_session_ids
@@ -358,11 +444,41 @@ def _run_question(
     )
 
 
+def _rerank_chunks_to_sessions(
+    *,
+    query: str,
+    chunk_rows: Sequence[sqlite3.Row],
+    reranker: RerankerService,
+    top_k: int,
+) -> list[str]:
+    """Cross-encode ``(query, chunk.text)`` pairs then max-pool by session.
+
+    The reranker assigns a relevance score to each chunk; every chunk's
+    score is compared against its owning session's running best. Sessions
+    are then ranked by best-chunk score and the top ``top_k`` paths are
+    returned.
+    """
+    if not chunk_rows:
+        return []
+    docs = [row["text"] for row in chunk_rows]
+    scores = reranker.score(query, docs)
+    best: dict[str, float] = {}
+    for row, score in zip(chunk_rows, scores, strict=True):
+        path = row["relative_path"]
+        prev = best.get(path)
+        if prev is None or score > prev:
+            best[path] = score
+    ordered = sorted(best.items(), key=lambda x: -x[1])
+    return [path for path, _ in ordered[:top_k]]
+
+
 def run_benchmark(
     entries: Sequence[LongMemEvalEntry],
     *,
     mode: Mode = "hybrid",
     embedder: EmbeddingService | None = None,
+    reranker: RerankerService | None = None,
+    rerank_depth: int = 50,
     chunk_size: int = 1200,
     chunk_overlap: int = 200,
     top_k: int = 20,
@@ -376,6 +492,10 @@ def run_benchmark(
         mode: One of ``"bm25"``, ``"vector"``, ``"hybrid"``.
         embedder: Embedding service. Required for ``vector`` and ``hybrid``;
             if omitted, a default :class:`EmbeddingService` is constructed.
+        reranker: Optional cross-encoder reranker. When provided, the first
+            stage retrieves ``rerank_depth`` sessions and the reranker
+            reorders them; the final top-K are taken from the reranked list.
+        rerank_depth: First-stage retrieval depth when ``reranker`` is set.
         chunk_size, chunk_overlap: Forwarded to :func:`chunk_markdown`.
         top_k: How many retrieved sessions to keep per question.
         max_embed_chars: Truncate each chunk to this many characters before
@@ -396,6 +516,8 @@ def run_benchmark(
             entry,
             mode=mode,
             embedder=embedder,
+            reranker=reranker,
+            rerank_depth=rerank_depth,
             chunk_size=chunk_size,
             chunk_overlap=chunk_overlap,
             top_k=top_k,
@@ -413,7 +535,12 @@ def run_benchmark(
 
     elapsed = time.perf_counter() - started
     return _summarize(
-        mode=mode, embedder=embedder, results=results, elapsed_seconds=elapsed
+        mode=mode,
+        embedder=embedder,
+        reranker=reranker,
+        rerank_depth=rerank_depth,
+        results=results,
+        elapsed_seconds=elapsed,
     )
 
 
@@ -421,15 +548,24 @@ def _summarize(
     *,
     mode: Mode,
     embedder: EmbeddingService,
+    reranker: RerankerService | None,
+    rerank_depth: int,
     results: list[QuestionResult],
     elapsed_seconds: float,
 ) -> BenchSummary:
+    reranker_provider = reranker.backend_name if reranker is not None else None
+    reranker_model = reranker.model_name if reranker is not None else None
+    rerank_depth_value = rerank_depth if reranker is not None else None
+
     n = len(results)
     if n == 0:
         empty = BenchSummary(
             mode=mode,
             embedding_provider=embedder.backend_name,
             embedding_model=embedder.model_name,
+            reranker_provider=reranker_provider,
+            reranker_model=reranker_model,
+            rerank_depth=rerank_depth_value,
             questions=0,
             recall_at_5=0.0,
             recall_at_10=0.0,
@@ -464,6 +600,9 @@ def _summarize(
         mode=mode,
         embedding_provider=embedder.backend_name,
         embedding_model=embedder.model_name,
+        reranker_provider=reranker_provider,
+        reranker_model=reranker_model,
+        rerank_depth=rerank_depth_value,
         questions=n,
         recall_at_5=sum(r.recall_at_5 for r in results) / n,
         recall_at_10=sum(r.recall_at_10 for r in results) / n,
@@ -480,10 +619,18 @@ def _summarize(
 def format_summary(summary: BenchSummary) -> str:
     """Pretty-print a summary as a multi-line string for console output."""
     lines: list[str] = []
-    lines.append(f"=== LongMemEval-S Results ({summary.mode}) ===")
+    header = summary.mode
+    if summary.reranker_provider:
+        header = f"{header} + rerank"
+    lines.append(f"=== LongMemEval-S Results ({header}) ===")
     lines.append(
         f"Embedder: {summary.embedding_provider} ({summary.embedding_model})"
     )
+    if summary.reranker_provider:
+        lines.append(
+            f"Reranker: {summary.reranker_provider} ({summary.reranker_model})"
+            f" depth={summary.rerank_depth}"
+        )
     lines.append(f"Questions: {summary.questions}")
     lines.append(f"recall_any@5:  {summary.recall_at_5 * 100:5.1f}%")
     lines.append(f"recall_any@10: {summary.recall_at_10 * 100:5.1f}%")

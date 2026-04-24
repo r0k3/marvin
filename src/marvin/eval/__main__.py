@@ -19,6 +19,7 @@ import sys
 from pathlib import Path
 
 from marvin.embeddings import EmbeddingService
+from marvin.reranker import DEFAULT_RERANK_MODEL, RerankerService
 
 from .longmemeval import (
     Mode,
@@ -101,6 +102,32 @@ def _build_parser() -> argparse.ArgumentParser:
         "agentmemory protocol)",
     )
     parser.add_argument(
+        "--rerank",
+        action="store_true",
+        help="Rerank first-stage results with a cross-encoder before top-K",
+    )
+    parser.add_argument(
+        "--rerank-model",
+        default=DEFAULT_RERANK_MODEL,
+        help=(
+            "Reranker model name (default: %(default)s). Any model listed by "
+            "``TextCrossEncoder.list_supported_models()`` works, plus "
+            f"{DEFAULT_RERANK_MODEL!r} via our custom ONNX registration."
+        ),
+    )
+    parser.add_argument(
+        "--rerank-depth",
+        type=int,
+        default=50,
+        help="First-stage retrieval depth when reranking (default: 50)",
+    )
+    parser.add_argument(
+        "--rerank-max-chars",
+        type=int,
+        default=1024,
+        help="Truncate each document to N chars before reranking (default: 1024)",
+    )
+    parser.add_argument(
         "--output",
         type=Path,
         default=None,
@@ -140,8 +167,19 @@ def main(argv: list[str] | None = None) -> int:
         dimensions=args.embedding_dim,
     )
 
+    reranker: RerankerService | None = None
+    if args.rerank:
+        reranker = RerankerService(
+            provider="fastembed",
+            model_name=args.rerank_model,
+            max_chars=args.rerank_max_chars,
+        )
+        # Eagerly load so a missing model surfaces before we churn on data.
+        _ = reranker.backend_name
+
+    mode_banner = args.mode + (" + rerank" if reranker else "")
     print(
-        f"Running LongMemEval-S in {args.mode} mode on {len(entries)} questions...",
+        f"Running LongMemEval-S in {mode_banner} mode on {len(entries)} questions...",
         flush=True,
     )
 
@@ -149,6 +187,8 @@ def main(argv: list[str] | None = None) -> int:
         entries,
         mode=args.mode,
         embedder=embedder,
+        reranker=reranker,
+        rerank_depth=args.rerank_depth,
         chunk_size=args.chunk_size,
         chunk_overlap=args.chunk_overlap,
         top_k=args.top_k,

@@ -22,6 +22,7 @@ from marvin.eval.longmemeval import (
     recall_any_at_k,
     run_benchmark,
 )
+from marvin.reranker import RerankerService
 
 
 # ---------------------------------------------------------------------------
@@ -234,3 +235,81 @@ class TestRunBenchmark:
         assert "recall_any@5" in text
         assert "MRR" in text
         assert "single-session-user" in text
+
+
+# ---------------------------------------------------------------------------
+# Reranker integration: run_benchmark must surface reranker metadata and
+# honour a custom reranker backend that reorders candidates.
+# ---------------------------------------------------------------------------
+
+
+class _ScoringReranker(RerankerService):
+    """RerankerService variant with a deterministic scoring hook.
+
+    We need two behaviours out of the box:
+    - Score documents containing the needle high and everything else low, so
+      that even mis-ordered first-stage retrieval ends with the gold at top.
+    - Report as a real (non-noop) backend so the summary fields populate.
+    """
+
+    def __init__(self, needle: str) -> None:
+        super().__init__(provider="none")
+        self._needle = needle
+        self._backend_name = "fake"
+        self.model_name = "fake-reranker"
+
+    def score(self, query: str, documents):
+        return [1.0 if self._needle in doc else 0.0 for doc in documents]
+
+    @property
+    def backend_name(self) -> str:
+        return "fake"
+
+
+class TestRerankIntegration:
+    def test_summary_records_reranker(self, hash_embedder: EmbeddingService):
+        entry = _planted_entry("q1", needle="zephyrcat")
+        reranker = _ScoringReranker(needle="zephyrcat")
+        summary = run_benchmark(
+            [entry],
+            mode="hybrid",
+            embedder=hash_embedder,
+            reranker=reranker,
+            rerank_depth=10,
+            top_k=5,
+            progress=0,
+        )
+        assert summary.reranker_provider == "fake"
+        assert summary.reranker_model == "fake-reranker"
+        assert summary.rerank_depth == 10
+        assert "+ rerank" in format_summary(summary)
+
+    def test_reranker_promotes_gold_session(self, hash_embedder: EmbeddingService):
+        # Build an entry where the gold session is buried among distractors
+        # that BM25 might score higher on. The reranker should still surface
+        # it because it carries the needle.
+        entry = _planted_entry("q1", needle="zephyrcat", distractors=8)
+        reranker = _ScoringReranker(needle="zephyrcat")
+        summary = run_benchmark(
+            [entry],
+            mode="bm25",
+            embedder=hash_embedder,
+            reranker=reranker,
+            rerank_depth=20,
+            top_k=5,
+            progress=0,
+        )
+        assert summary.recall_at_5 == 1.0
+        retrieved = summary.per_question[0].retrieved_session_ids
+        assert retrieved[0] == "q1_gold"
+
+    def test_no_reranker_leaves_metadata_empty(
+        self, hash_embedder: EmbeddingService
+    ):
+        entry = _planted_entry("q1", needle="zephyrcat")
+        summary = run_benchmark(
+            [entry], mode="bm25", embedder=hash_embedder, top_k=5, progress=0
+        )
+        assert summary.reranker_provider is None
+        assert summary.reranker_model is None
+        assert summary.rerank_depth is None

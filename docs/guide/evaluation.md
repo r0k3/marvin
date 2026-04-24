@@ -61,6 +61,11 @@ python -m marvin.eval --dataset PATH --mode bm25 \
 | `vector` | `sqlite-vec` only              | Pure dense retrieval ablation.     |
 | `hybrid` | FTS5 + sqlite-vec, RRF fused   | Default. Mirrors `service.search`. |
 
+`--rerank` composes orthogonally with any mode. The first stage fetches a
+pool of chunks (controlled by `--rerank-depth`), the cross-encoder scores
+each `(query, chunk_text)` pair, and the session-level result is the
+max-pool of chunk scores. See [Reranking](#reranking) below.
+
 ### Baseline numbers
 
 Run on commit `feature/eval-longmemeval`, multi-core CPU, no GPU,
@@ -98,6 +103,62 @@ For interactive iteration:
 Reducing this cost is on the roadmap (smaller models, batched embedding
 service, optional GPU/Metal backends).
 
+### Reranking
+
+Hybrid retrieval is strong at *finding* the right chunk but RRF only uses
+rank order — it ignores query-document interactions. A cross-encoder
+reranker reads the query and each candidate jointly and typically lifts
+top-K precision by 5–15 points on open-domain QA tasks at the cost of a
+few hundred ms per query on CPU.
+
+The harness (and `MarvinService.search`) ship with an optional reranking
+pass backed by [`fastembed`'s](https://qdrant.github.io/fastembed/)
+`TextCrossEncoder`. The default model is
+[`BAAI/bge-reranker-v2-m3`](https://huggingface.co/BAAI/bge-reranker-v2-m3):
+multilingual, 568M params, Apache-2.0. BAAI does not publish ONNX weights
+directly, so Marvin registers the community
+[`onnx-community/bge-reranker-v2-m3-ONNX`](https://huggingface.co/onnx-community/bge-reranker-v2-m3-ONNX)
+int8 port (~570 MB, single file) via `TextCrossEncoder.add_custom_model`
+the first time the reranker is constructed. Any reranker listed by
+`TextCrossEncoder.list_supported_models()` works too — pass e.g.
+`--rerank-model Xenova/ms-marco-MiniLM-L-6-v2` for a faster, English-only
+alternative.
+
+```bash
+# BM25 retrieval + cross-encoder reranking on the first 50 questions.
+python -m marvin.eval \
+    --dataset experiments/data/longmemeval_s_cleaned.json \
+    --mode bm25 \
+    --rerank \
+    --rerank-depth 50 \
+    --limit 50 \
+    --output experiments/results/bm25_rerank.json
+```
+
+Flags:
+
+- `--rerank` — enable the cross-encoder.
+- `--rerank-model` — HF model id (default: `BAAI/bge-reranker-v2-m3`).
+- `--rerank-depth` — first-stage chunk pool size (default: 50). Chunks,
+  not sessions: several chunks from the same session are scored
+  independently and max-pooled back.
+- `--rerank-max-chars` — per-document truncation before tokenisation
+  (default: 1024). Keeps CPU cost bounded.
+
+Why *chunk* reranking rather than session-level? LongMemEval sessions are
+long conversations (commonly 10–20 KB of raw turns). The reranker's input
+window is effectively 512 tokens, so naively prefixing a whole session
+discards the very signal we need. Scoring the chunks that first-stage
+retrieval already matched, then max-pooling to sessions, recovers the
+signal cleanly.
+
+Performance: with `bge-reranker-v2-m3` quantized to int8 on CPU, 50
+`(query, chunk)` pairs take roughly 2–4 seconds on an idle workstation
+and much more on a heavily-loaded box. Budget a few minutes of wall time
+per 100 questions in the harness, or pick a smaller model for
+interactive iteration. MCP gateway queries pay the reranker cost once
+per `search()` call and only when `rerank_enabled` is set.
+
 ### Output
 
 The CLI prints a per-question-type breakdown and writes a JSON dump:
@@ -127,12 +188,15 @@ metrics — useful for digging into failure cases.
 from pathlib import Path
 from marvin.embeddings import EmbeddingService
 from marvin.eval.longmemeval import load_dataset, run_benchmark
+from marvin.reranker import RerankerService
 
 entries = load_dataset(Path("experiments/data/longmemeval_s_cleaned.json"))
 summary = run_benchmark(
     entries[:50],
     mode="hybrid",
     embedder=EmbeddingService(),
+    reranker=RerankerService(provider="fastembed"),
+    rerank_depth=50,
 )
 print(summary.recall_at_5, summary.mrr)
 ```
