@@ -38,6 +38,7 @@ Biological memory isn't just stored; it is *consolidated* while we sleep. Marvin
 - **Computational Sleep** — Background consolidation via local open-weight models (Ollama).
 - **Hybrid Retrieval** — SQLite-vec (ONNX embeddings) + FTS5 keyword search, combined via Reciprocal Rank Fusion.
 - **MCP Gateway** — 13 tools over SSE (port 8421) or stdio. Plug into any MCP-compatible agent.
+- **Reproducible Benchmark** — Built-in [LongMemEval-S](https://arxiv.org/abs/2410.10813) harness so retrieval changes are measured, not vibes (BM25 baseline: `recall_any@5 = 95.6%`).
 
 ## Architecture
 
