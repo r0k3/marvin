@@ -38,6 +38,13 @@ class MarvinSettings(BaseSettings):
     search_limit: int = Field(default=6)
     recency_limit: int = Field(default=6)
 
+    # Each first-stage stream (FTS5 and sqlite-vec) pulls
+    # ``max(limit * first_stage_overfetch, first_stage_overfetch_min)`` chunks
+    # before they are fused with RRF. Higher values trade latency for recall;
+    # the defaults match the legacy hardcoded ``max(limit * 5, 20)``.
+    first_stage_overfetch: int = Field(default=5, ge=1)
+    first_stage_overfetch_min: int = Field(default=20, ge=1)
+
     @property
     def resolved_vault_path(self) -> Path:
         return self.vault_path.expanduser().resolve()

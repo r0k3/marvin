@@ -50,7 +50,10 @@ class MarvinService:
             max_chars=self.settings.rerank_max_chars,
         )
         self.index = MemoryIndex(
-            self.settings.index_path, dimensions=self.settings.embedding_dimensions
+            self.settings.index_path,
+            dimensions=self.settings.embedding_dimensions,
+            first_stage_overfetch=self.settings.first_stage_overfetch,
+            first_stage_overfetch_min=self.settings.first_stage_overfetch_min,
         )
 
     def close(self) -> None:

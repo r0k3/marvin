@@ -66,6 +66,19 @@ pool of chunks (controlled by `--rerank-depth`), the cross-encoder scores
 each `(query, chunk_text)` pair, and the session-level result is the
 max-pool of chunk scores. See [Reranking](#reranking) below.
 
+#### First-stage over-fetch
+
+Each first-stage ranker (FTS5 and `sqlite-vec`) pulls
+`max(limit * first_stage_overfetch, first_stage_overfetch_min)` chunks
+before RRF fusion. The defaults (multiplier `5`, floor `20`) preserve
+the previous hardcoded behaviour and are now exposed via
+`MARVIN_FIRST_STAGE_OVERFETCH` / `MARVIN_FIRST_STAGE_OVERFETCH_MIN` (or
+the matching fields on `MarvinSettings`). Increase the multiplier for
+deeper recall before reranking; decrease it to cut first-stage SQL
+work. When `--rerank` is enabled, `--rerank-depth` is the second-stage
+pool size; if it exceeds what RRF can produce given the per-stream
+limit, the reranker gets fewer candidates than requested.
+
 ### Baseline numbers
 
 Run on commit `feature/eval-longmemeval`, multi-core CPU, no GPU,

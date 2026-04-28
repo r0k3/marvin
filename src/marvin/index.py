@@ -101,9 +101,22 @@ def _window_text(text: str, *, chunk_size: int, chunk_overlap: int) -> list[str]
 
 
 class MemoryIndex:
-    def __init__(self, db_path: Path, dimensions: int) -> None:
+    def __init__(
+        self,
+        db_path: Path,
+        dimensions: int,
+        *,
+        first_stage_overfetch: int = 5,
+        first_stage_overfetch_min: int = 20,
+    ) -> None:
         self.db_path = db_path
         self.dimensions = dimensions
+        # Per-stream over-fetch tuning. ``hybrid_search`` pulls
+        # ``max(limit * first_stage_overfetch, first_stage_overfetch_min)``
+        # chunks from each ranker before RRF fusion. Higher = more recall,
+        # more SQL work per query.
+        self.first_stage_overfetch = max(1, first_stage_overfetch)
+        self.first_stage_overfetch_min = max(1, first_stage_overfetch_min)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self.conn = sqlite3.connect(self.db_path)
         self.conn.row_factory = sqlite3.Row
@@ -255,10 +268,14 @@ class MemoryIndex:
         *,
         include_chunk_text: bool = False,
     ) -> list[SearchHit]:
-        vec_hits = self._vector_hits(
-            query_embedding=query_embedding, limit=max(limit * 5, 20), kind=kind
+        per_stream_limit = max(
+            limit * self.first_stage_overfetch,
+            self.first_stage_overfetch_min,
         )
-        fts_hits = self._fts_hits(query=query, limit=max(limit * 5, 20), kind=kind)
+        vec_hits = self._vector_hits(
+            query_embedding=query_embedding, limit=per_stream_limit, kind=kind
+        )
+        fts_hits = self._fts_hits(query=query, limit=per_stream_limit, kind=kind)
 
         scores: dict[int, float] = defaultdict(float)
         details: dict[int, sqlite3.Row] = {}
