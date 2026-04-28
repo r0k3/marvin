@@ -128,6 +128,40 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Truncate each document to N chars before reranking (default: 1024)",
     )
     parser.add_argument(
+        "--no-kg",
+        action="store_true",
+        help="Disable the K-Lines graph stream entirely (chunk-only RRF)",
+    )
+    parser.add_argument(
+        "--at-ingest",
+        action="store_true",
+        help="Enable at-ingest regex entity extraction (off by default; "
+        "produces a small regression on LongMemEval-S because chat data "
+        "is dominated by sentence-starter capitalised noise)",
+    )
+    parser.add_argument(
+        "--kg-ingest-min-length",
+        type=int,
+        default=3,
+        help="Drop at-ingest entities shorter than this many characters "
+        "(default: 3, matching MarvinSettings)",
+    )
+    parser.add_argument(
+        "--kg-allow-single-word",
+        action="store_true",
+        help="Disable the default multi-word-only filter on at-ingest "
+        "entities. Single capitalised tokens (Spotify, Java) become "
+        "entities too -- useful on curated text, but on chat-style "
+        "data introduces heavy sentence-starter noise.",
+    )
+    parser.add_argument(
+        "--kg-fusion-weight",
+        type=float,
+        default=0.5,
+        help="RRF weight for the graph stream relative to the chunk "
+        "stream (default 0.5; 1.0 = symmetric fusion)",
+    )
+    parser.add_argument(
         "--output",
         type=Path,
         default=None,
@@ -183,6 +217,14 @@ def main(argv: list[str] | None = None) -> int:
         flush=True,
     )
 
+    index_options: dict[str, object] = {
+        "kg_enabled": not args.no_kg,
+        "kg_extract_at_ingest": args.at_ingest,
+        "kg_ingest_min_length": args.kg_ingest_min_length,
+        "kg_ingest_multiword_only": not args.kg_allow_single_word,
+        "kg_fusion_weight": args.kg_fusion_weight,
+    }
+
     summary = run_benchmark(
         entries,
         mode=args.mode,
@@ -194,6 +236,7 @@ def main(argv: list[str] | None = None) -> int:
         top_k=args.top_k,
         max_embed_chars=args.max_embed_chars,
         progress=args.progress,
+        index_options=index_options,
     )
 
     print()

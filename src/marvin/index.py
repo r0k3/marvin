@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import re
 import sqlite3
 from collections import defaultdict
@@ -10,6 +11,7 @@ from pathlib import Path
 import numpy as np
 import sqlite_vec
 
+from .extraction import _fallback_extract
 from .models import ChunkRecord, MemoryKind, NoteRecord, SearchHit
 
 
@@ -111,6 +113,10 @@ class MemoryIndex:
         first_stage_overfetch_min: int = 20,
         kg_enabled: bool = True,
         kg_rrf_k: float = 60.0,
+        kg_fusion_weight: float = 0.5,
+        kg_extract_at_ingest: bool = False,
+        kg_ingest_min_length: int = 3,
+        kg_ingest_multiword_only: bool = True,
     ) -> None:
         self.db_path = db_path
         self.dimensions = dimensions
@@ -120,17 +126,34 @@ class MemoryIndex:
         # more SQL work per query.
         self.first_stage_overfetch = max(1, first_stage_overfetch)
         self.first_stage_overfetch_min = max(1, first_stage_overfetch_min)
-        # K-Lines graph stream toggles and RRF damping constant. Defaults
-        # to enabled because hydration is cheap and the stream silently
-        # contributes nothing when no entities exist.
+        # K-Lines graph stream toggles and RRF damping. Defaults to
+        # enabled because hydration is cheap and the stream silently
+        # contributes nothing when no entities exist. ``kg_fusion_weight``
+        # scales the graph stream's RRF contribution relative to the
+        # chunk-tier; values < 1 prevent the (noisier) entity ranking
+        # from displacing strong chunk matches, while still allowing
+        # graph signal to break ties and surface graph-only notes.
         self.kg_enabled = kg_enabled
         self.kg_rrf_k = kg_rrf_k
+        self.kg_fusion_weight = max(0.0, kg_fusion_weight)
+        # At-ingest fallback entity extraction (regex over capitalised
+        # noun phrases). When enabled, ``upsert_note`` augments
+        # ``metadata.links`` with extracted entities before hydrating
+        # ``entity_edges``, so the graph stream has signal even on
+        # unconsolidated notes.
+        self.kg_extract_at_ingest = kg_extract_at_ingest
+        self.kg_ingest_min_length = max(1, kg_ingest_min_length)
+        self.kg_ingest_multiword_only = kg_ingest_multiword_only
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self.conn = sqlite3.connect(self.db_path)
         self.conn.row_factory = sqlite3.Row
         self.conn.enable_load_extension(True)
         sqlite_vec.load(self.conn)
         self.conn.enable_load_extension(False)
+        # Register ``log`` so ``_graph_hits`` can compute IDF in SQL on
+        # builds where the SQLite math extension is not compiled in
+        # (Python's bundled sqlite3 typically isn't).
+        self.conn.create_function("log", 1, math.log, deterministic=True)
         self._create_schema()
 
     def close(self) -> None:
@@ -221,7 +244,35 @@ class MemoryIndex:
                     (chunk_id, packed),
                 )
 
-            self._replace_entity_edges(note_id, note.metadata.links)
+            self._replace_entity_edges(
+                note_id, self._collect_entity_strings(note)
+            )
+
+    def _collect_entity_strings(self, note: NoteRecord) -> list[str]:
+        """Combine explicit wikilinks with at-ingest regex extraction.
+
+        Explicit ``metadata.links`` (parsed from ``[[wikilinks]]``) come
+        first so they win the display-name slot in the entity registry;
+        at-ingest extractions only contribute entities the wikilinks did
+        not already cover. When ``kg_extract_at_ingest`` is disabled we
+        return ``metadata.links`` unchanged, preserving Phase 1A
+        behaviour.
+        """
+        explicit = list(note.metadata.links or [])
+        if not self.kg_extract_at_ingest:
+            return explicit
+        seen = {_normalize_entity(link) for link in explicit}
+        for ent in _extract_at_ingest(
+            note.body,
+            min_length=self.kg_ingest_min_length,
+            multiword_only=self.kg_ingest_multiword_only,
+        ):
+            normalized = _normalize_entity(ent)
+            if not normalized or normalized in seen:
+                continue
+            seen.add(normalized)
+            explicit.append(ent)
+        return explicit
 
     def _replace_entity_edges(self, note_id: int, links: list[str]) -> None:
         """Rebuild ``entity_edges`` for ``note_id`` from the note's wikilinks.
@@ -412,11 +463,14 @@ class MemoryIndex:
                         note_best_chunk[row["relative_path"]] = row
 
         # Second-tier RRF: chunk-fused note ranking + graph note ranking.
+        # The graph stream is weighted by ``kg_fusion_weight`` (default
+        # 0.5) so a noisy entity ranking cannot overrule strong chunk
+        # matches; setting it to 1.0 reverts to symmetric fusion.
         final_scores: dict[str, float] = defaultdict(float)
         for rank, (path, _) in enumerate(chunk_ranking, start=1):
             final_scores[path] += 1.0 / (rrf_k + rank)
         for rank, (path, _) in enumerate(graph_ranking, start=1):
-            final_scores[path] += 1.0 / (rrf_k + rank)
+            final_scores[path] += self.kg_fusion_weight / (rrf_k + rank)
 
         sorted_paths = sorted(
             final_scores, key=lambda path: final_scores[path], reverse=True
@@ -473,17 +527,58 @@ class MemoryIndex:
         limit: int,
         kind: MemoryKind | None,
     ) -> list[sqlite3.Row]:
-        """Notes ranked by total edge-weight to any of ``query_entity_ids``.
+        """IDF-weighted note ranking by overlap with ``query_entity_ids``.
 
-        One-hop direct overlap: a note that links to two query entities
-        scores higher than one that links to a single query entity. The
-        returned rows include the raw score for transparency / debugging
-        but only the rank position is what feeds RRF.
+        Without IDF, a query that resolves to a common at-ingest entity
+        (the speaker's name, the platform brand) drowns the chunk-tier
+        signal because every session edges into it. With IDF, common
+        entities contribute little and rare entities a lot -- the same
+        intuition BM25 uses for terms.
+
+        Score: ``sum_over_matched_entities(weight * idf(e))`` where
+        ``idf(e) = log((N + 1) / (df(e) + 0.5))`` and ``N`` is total
+        notes (``df`` is restricted to ``kind`` when filtering).
+
+        SQL keeps it one round-trip: a CTE materialises per-entity df,
+        the outer join applies the weight, and ``GROUP BY note_id``
+        sums.
         """
         if not query_entity_ids:
             return []
+        if kind is not None:
+            n_notes_row = self.conn.execute(
+                "SELECT COUNT(*) FROM notes WHERE kind = ?", (kind.value,)
+            ).fetchone()
+        else:
+            n_notes_row = self.conn.execute(
+                "SELECT COUNT(*) FROM notes"
+            ).fetchone()
+        n_notes = n_notes_row[0] if n_notes_row else 0
+        if n_notes == 0:
+            return []
+
         placeholders = ",".join("?" for _ in query_entity_ids)
+        if kind is not None:
+            df_cte = f"""
+                SELECT ee.entity_id, COUNT(*) AS df
+                FROM entity_edges ee
+                JOIN notes n ON n.id = ee.note_id
+                WHERE n.kind = ?
+                GROUP BY ee.entity_id
+            """
+            df_params: list[object] = [kind.value]
+        else:
+            df_cte = """
+                SELECT entity_id, COUNT(*) AS df
+                FROM entity_edges
+                GROUP BY entity_id
+            """
+            df_params = []
+
         sql = f"""
+            WITH ent_df AS (
+                {df_cte}
+            )
             SELECT
                 n.id AS note_id,
                 n.relative_path,
@@ -492,12 +587,16 @@ class MemoryIndex:
                 n.tags_json,
                 n.links_json,
                 COUNT(*) AS overlap,
-                SUM(ee.weight) AS raw_score
+                SUM(
+                    ee.weight
+                    * log(({n_notes} + 1.0) / (COALESCE(ent_df.df, 1) + 0.5))
+                ) AS raw_score
             FROM entity_edges ee
             JOIN notes n ON n.id = ee.note_id
+            LEFT JOIN ent_df ON ent_df.entity_id = ee.entity_id
             WHERE ee.entity_id IN ({placeholders})
         """
-        params: list[object] = list(query_entity_ids)
+        params: list[object] = [*df_params, *query_entity_ids]
         if kind is not None:
             sql += " AND n.kind = ?"
             params.append(kind.value)
@@ -701,6 +800,82 @@ def _normalize_entity(name: str) -> str:
     text such as German eszett / Turkish dotted I).
     """
     return name.strip().casefold()
+
+
+# Common English determiners / pronouns / particles that get capitalised
+# at sentence start and produce pure noise when fed to the regex
+# entity extractor. Multi-word matches (``Apple Card``) are passed
+# through even when their first token would be a stop-word in isolation;
+# only *single-word* extractions are dropped if they hit this set.
+_INGEST_STOPWORDS: frozenset[str] = frozenset({
+    "the", "this", "that", "these", "those",
+    "and", "but", "for", "yet", "nor",
+    "with", "from", "into", "onto", "upon", "after", "before",
+    "yes", "yeah", "yep", "no", "nope", "okay", "ok", "sure",
+    "hello", "hi", "hey",
+    "how", "what", "when", "where", "why", "who", "which",
+    "she", "they", "you", "his", "her", "him", "them",
+    "their", "your", "yours", "ours", "theirs",
+    "are", "was", "were", "been", "being",
+    "have", "has", "had", "having",
+    "well", "now", "then", "there", "here", "also",
+    "good", "great", "nice", "thanks", "please",
+})
+
+
+def _extract_at_ingest(
+    body: str,
+    *,
+    min_length: int,
+    multiword_only: bool = True,
+) -> list[str]:
+    """Regex-extract capitalised noun phrases for at-ingest graph hydration.
+
+    Wraps ``extraction._fallback_extract`` and layers three filters
+    against the dominant noise patterns on chat-style data:
+
+    * ``min_length`` filters very short tokens.
+    * If ``multiword_only`` (default ``True``), single-word
+      extractions are dropped wholesale. Capitalised single words on
+      chat data are dominated by sentence-starter imperatives
+      (``Remember``, ``However``, ``Can``, ``Did``); a clean
+      multi-word policy throws those away.
+    * Multi-word phrases are then quality-filtered:
+        - any 1-character token (``But I``, ``And I``, ``As I``) is
+          rejected; the regex is greedy across capitalised tokens and
+          ``I`` qualifies, producing pseudo-phrases that are pure
+          noise;
+        - the first or last token being in the stop-word list rejects
+          ``But Mark`` / ``Mark But`` style sentence fragments. This
+          forfeits a few legitimate ``The X`` phrases; on chat data
+          the trade is net positive, and curated knowledge can still
+          be supplied via explicit ``[[wikilinks]]``.
+    * Loose mode (``multiword_only=False``): only the single-word
+      stop-word filter applies. Useful on curated text.
+    """
+    if not body:
+        return []
+    raw = _fallback_extract(body)
+    out: list[str] = []
+    for ent in raw:
+        cleaned = ent.strip()
+        if len(cleaned) < min_length:
+            continue
+        tokens = cleaned.split()
+        is_multiword = len(tokens) > 1
+        if multiword_only and not is_multiword:
+            continue
+        if not is_multiword and cleaned.casefold() in _INGEST_STOPWORDS:
+            continue
+        if is_multiword:
+            if any(len(t) < 2 for t in tokens):
+                continue
+            if tokens[0].casefold() in _INGEST_STOPWORDS:
+                continue
+            if tokens[-1].casefold() in _INGEST_STOPWORDS:
+                continue
+        out.append(cleaned)
+    return out
 
 
 # FTS5 reserves these characters for query syntax (phrase, prefix, boolean,

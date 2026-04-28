@@ -56,6 +56,10 @@ class MarvinService:
             first_stage_overfetch_min=self.settings.first_stage_overfetch_min,
             kg_enabled=self.settings.kg_enabled,
             kg_rrf_k=self.settings.kg_rrf_k,
+            kg_fusion_weight=self.settings.kg_fusion_weight,
+            kg_extract_at_ingest=self.settings.kg_extract_at_ingest,
+            kg_ingest_min_length=self.settings.kg_ingest_min_length,
+            kg_ingest_multiword_only=self.settings.kg_ingest_multiword_only,
         )
 
     def close(self) -> None:
@@ -97,6 +101,10 @@ class MarvinService:
             "reranker_backend": reranker_backend,
             "kg_enabled": self.settings.kg_enabled,
             "kg_rrf_k": self.settings.kg_rrf_k,
+            "kg_fusion_weight": self.settings.kg_fusion_weight,
+            "kg_extract_at_ingest": self.settings.kg_extract_at_ingest,
+            "kg_ingest_min_length": self.settings.kg_ingest_min_length,
+            "kg_ingest_multiword_only": self.settings.kg_ingest_multiword_only,
             "vault_path": str(self.settings.resolved_vault_path),
             "index_path": str(self.settings.index_path),
         }

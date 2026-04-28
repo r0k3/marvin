@@ -10,6 +10,7 @@ import pytest
 
 from marvin.index import (
     MemoryIndex,
+    _extract_at_ingest,
     _normalize_entity,
     _sanitize_fts_query,
     chunk_markdown,
@@ -180,10 +181,18 @@ def _empty_embeds(n: int, dim: int = 8) -> list[np.ndarray]:
 
 
 class TestKgSchemaAndHydration:
-    """Schema and edge hydration for the K-Lines retrieval stream."""
+    """Schema and edge hydration for the K-Lines retrieval stream.
+
+    These tests assert exact edge sets, so they pin
+    ``kg_extract_at_ingest=False`` to isolate explicit-wikilink hydration.
+    At-ingest fallback extraction is exercised separately in
+    :class:`TestKgAtIngestExtraction`.
+    """
 
     def _index(self) -> MemoryIndex:
-        return MemoryIndex(Path(":memory:"), dimensions=8)
+        return MemoryIndex(
+            Path(":memory:"), dimensions=8, kg_extract_at_ingest=False
+        )
 
     def test_schema_creates_kg_tables(self) -> None:
         index = self._index()
@@ -568,6 +577,363 @@ class TestKgHybridFusion:
                 )
             graph_spy.assert_not_called()
             resolve_spy.assert_not_called()
+        finally:
+            index.close()
+
+
+class TestExtractAtIngest:
+    """Pure helper: capitalised noun phrase extraction with stop-word filter."""
+
+    def test_empty_body(self) -> None:
+        assert _extract_at_ingest("", min_length=3) == []
+
+    def test_default_is_multiword_only(self) -> None:
+        # Defaults to ``multiword_only=True`` so single-word capitalised
+        # noise like sentence-starter imperatives gets dropped wholesale.
+        out = _extract_at_ingest(
+            "Remember, you must call Apple Card support today.",
+            min_length=3,
+        )
+        assert "Apple Card" in out
+        assert "Remember" not in out
+
+    def test_multiword_only_drops_proper_single_nouns_too(self) -> None:
+        # The trade-off: legitimate single-word proper nouns are also
+        # dropped. This is intentional; explicit ``[[wikilinks]]`` and
+        # the LLM consolidator pick those up later.
+        out = _extract_at_ingest(
+            "I love Spotify and Java.", min_length=3
+        )
+        assert out == []
+
+    def test_multiword_only_false_keeps_single_word_nouns(self) -> None:
+        # Single-word path picks up real proper nouns. The stop-word
+        # filter catches the worst common-word noise (``The``, ``His``)
+        # but cannot catch every imperative verb an LLM uses in chat
+        # (``Remember``, ``Consider`` etc); that is precisely why
+        # ``multiword_only=True`` is the default.
+        out = _extract_at_ingest(
+            "I love Spotify and Java.",
+            min_length=3,
+            multiword_only=False,
+        )
+        assert "Spotify" in out
+        assert "Java" in out
+
+    def test_min_length_filters_short_tokens_in_loose_mode(self) -> None:
+        out = _extract_at_ingest(
+            "Hi I am Bob and Alice.",
+            min_length=3,
+            multiword_only=False,
+        )
+        assert "Bob" in out and "Alice" in out
+        assert "Hi" not in out and "I" not in out
+
+    def test_single_word_stopwords_dropped_in_loose_mode(self) -> None:
+        out = _extract_at_ingest(
+            "The user told them. There was a Quokka in His backyard.",
+            min_length=3,
+            multiword_only=False,
+        )
+        assert "Quokka" in out
+        for noise in ("The", "There", "His"):
+            assert noise not in out
+
+    def test_stopword_head_or_tail_dropped(self) -> None:
+        # On chat data, ``But I``, ``And I``, ``Once I`` and the like
+        # are noise, not entities. We drop multi-word phrases whose
+        # head or tail token is a stop-word; curated ``[[The Quokka]]``
+        # wikilinks remain the route for keeping such phrases.
+        out = _extract_at_ingest(
+            "But I think Apple Card is fine. Once I tried The Quokka.",
+            min_length=3,
+        )
+        assert "Apple Card" in out
+        for noise in ("But I", "Once I", "The Quokka"):
+            assert noise not in out
+
+    def test_singleletter_token_rejected(self) -> None:
+        # Greedy ``\b[A-Z][a-zA-Z]*(?: ...)*\b`` regex picks up ``But I``
+        # because ``I`` qualifies as a capitalised token. We reject any
+        # multi-word phrase containing a 1-char token.
+        out = _extract_at_ingest("Then I told Mark Smith.", min_length=3)
+        assert "Mark Smith" in out
+        assert "Then I" not in out
+
+    def test_returns_a_list_with_no_duplicates_per_call(self) -> None:
+        out = _extract_at_ingest(
+            "Apple Card Apple Card facts about the Apple Card.",
+            min_length=3,
+        )
+        assert out.count("Apple Card") == 1
+
+
+class TestKgUpsertAtIngest:
+    """End-to-end: at-ingest extraction populates the graph for unconsolidated notes."""
+
+    def test_default_settings(self) -> None:
+        # At-ingest extraction defaults to OFF: empirical regression on
+        # chat-style benchmarks (multi-session R@5 -7pp on LongMemEval-S
+        # 100q) makes it opt-in. min_length and multiword_only retain
+        # noise-suppressing defaults so that when users do enable it,
+        # they get the polished policy.
+        index = MemoryIndex(Path(":memory:"), dimensions=8)
+        try:
+            assert index.kg_extract_at_ingest is False
+            assert index.kg_ingest_min_length == 3
+            assert index.kg_ingest_multiword_only is True
+            assert index.kg_fusion_weight == 0.5
+        finally:
+            index.close()
+
+    def test_extract_default_is_silent(self) -> None:
+        # Phase 1A behaviour: with the default off, no entities or
+        # edges materialise on raw notes; the graph stream stays
+        # silent unless explicit wikilinks exist.
+        index = MemoryIndex(Path(":memory:"), dimensions=8)
+        try:
+            note = _make_note(
+                "session_1",
+                "Sarah moved to Seattle and started using Apple Card.",
+                links=[],
+            )
+            chunks = chunk_markdown(note, 1200, 200)
+            index.upsert_note(
+                note,
+                "session_1",
+                chunks=chunks,
+                embeddings=_empty_embeds(len(chunks)),
+            )
+            entity_count = index.conn.execute(
+                "SELECT COUNT(*) FROM entities"
+            ).fetchone()[0]
+            assert entity_count == 0
+        finally:
+            index.close()
+
+    def test_extract_when_opted_in_populates_only_multiword_entities(
+        self,
+    ) -> None:
+        # With ``kg_extract_at_ingest=True`` and the default
+        # ``multiword_only=True`` policy, only ``Apple Card`` survives;
+        # ``Sarah`` / ``Seattle`` (single words) and sentence-starter
+        # noise are dropped.
+        index = MemoryIndex(
+            Path(":memory:"),
+            dimensions=8,
+            kg_extract_at_ingest=True,
+        )
+        try:
+            note = _make_note(
+                "session_1",
+                "Sarah moved to Seattle and started using Apple Card.",
+                links=[],
+            )
+            chunks = chunk_markdown(note, 1200, 200)
+            index.upsert_note(
+                note,
+                "session_1",
+                chunks=chunks,
+                embeddings=_empty_embeds(len(chunks)),
+            )
+            normalized = {
+                row["normalized"]
+                for row in index.conn.execute(
+                    "SELECT normalized FROM entities"
+                ).fetchall()
+            }
+            assert normalized == {"apple card"}
+        finally:
+            index.close()
+
+    def test_loose_mode_picks_up_single_word_entities(self) -> None:
+        index = MemoryIndex(
+            Path(":memory:"),
+            dimensions=8,
+            kg_extract_at_ingest=True,
+            kg_ingest_multiword_only=False,
+        )
+        try:
+            note = _make_note(
+                "session_1",
+                "Sarah moved to Seattle and started using Apple Card.",
+                links=[],
+            )
+            chunks = chunk_markdown(note, 1200, 200)
+            index.upsert_note(
+                note,
+                "session_1",
+                chunks=chunks,
+                embeddings=_empty_embeds(len(chunks)),
+            )
+            normalized = {
+                row["normalized"]
+                for row in index.conn.execute(
+                    "SELECT normalized FROM entities"
+                ).fetchall()
+            }
+            assert "sarah" in normalized
+            assert "seattle" in normalized
+            assert "apple card" in normalized
+        finally:
+            index.close()
+
+    def test_disabled_setting_skips_extraction(self) -> None:
+        index = MemoryIndex(
+            Path(":memory:"), dimensions=8, kg_extract_at_ingest=False
+        )
+        try:
+            note = _make_note(
+                "session_1",
+                "Sarah moved to Seattle.",
+                links=[],
+            )
+            chunks = chunk_markdown(note, 1200, 200)
+            index.upsert_note(
+                note,
+                "session_1",
+                chunks=chunks,
+                embeddings=_empty_embeds(len(chunks)),
+            )
+            entity_count = index.conn.execute(
+                "SELECT COUNT(*) FROM entities"
+            ).fetchone()[0]
+            assert entity_count == 0
+        finally:
+            index.close()
+
+    def test_explicit_links_dedup_against_at_ingest_extraction(self) -> None:
+        """When a wikilink and a regex extraction normalise to the same
+        casefolded form, only one entity row is created; the explicit
+        wikilink wins the display-name slot."""
+        index = MemoryIndex(
+            Path(":memory:"),
+            dimensions=8,
+            kg_extract_at_ingest=True,
+            kg_ingest_multiword_only=False,
+        )
+        try:
+            note = _make_note(
+                "session_1",
+                "Quokka in Western Australia.",
+                links=["Quokka"],
+            )
+            chunks = chunk_markdown(note, 1200, 200)
+            index.upsert_note(
+                note,
+                "session_1",
+                chunks=chunks,
+                embeddings=_empty_embeds(len(chunks)),
+            )
+            quokka_rows = index.conn.execute(
+                "SELECT name FROM entities WHERE normalized = 'quokka'"
+            ).fetchall()
+            assert len(quokka_rows) == 1
+            assert quokka_rows[0]["name"] == "Quokka"
+        finally:
+            index.close()
+
+    def test_min_length_setting_applied(self) -> None:
+        # ``min_length=4`` drops 3-letter capitalised tokens like ``Sue``
+        # while keeping the full ``Australia`` token. Loose
+        # (single-word) mode is needed because both candidates are
+        # single tokens.
+        index = MemoryIndex(
+            Path(":memory:"),
+            dimensions=8,
+            kg_extract_at_ingest=True,
+            kg_ingest_min_length=4,
+            kg_ingest_multiword_only=False,
+        )
+        try:
+            note = _make_note(
+                "session_1",
+                "Sue lives in Australia.",
+                links=[],
+            )
+            chunks = chunk_markdown(note, 1200, 200)
+            index.upsert_note(
+                note,
+                "session_1",
+                chunks=chunks,
+                embeddings=_empty_embeds(len(chunks)),
+            )
+            normalized = {
+                row["normalized"]
+                for row in index.conn.execute(
+                    "SELECT normalized FROM entities"
+                ).fetchall()
+            }
+            assert "sue" not in normalized
+            assert "australia" in normalized
+        finally:
+            index.close()
+
+    def test_at_ingest_makes_unconsolidated_note_graph_retrievable(self) -> None:
+        """The whole point of Phase 1B: a note without ``[[wikilinks]]``
+        but containing a multi-word capitalised entity in its body
+        should surface for a query mentioning that entity, even with
+        zero lexical overlap on the rest of the body."""
+        index = MemoryIndex(
+            Path(":memory:"),
+            dimensions=8,
+            kg_extract_at_ingest=True,
+        )
+        try:
+            a = _make_note(
+                "lexical",
+                "this entry contains the search words",
+                links=[],
+            )
+            chunks_a = chunk_markdown(a, 1200, 200)
+            index.upsert_note(
+                a, "lexical", chunks=chunks_a, embeddings=_empty_embeds(len(chunks_a))
+            )
+
+            b = _make_note(
+                "graph_via_ingest",
+                "I bought groceries with Apple Card last weekend.",
+                links=[],
+            )
+            chunks_b = chunk_markdown(b, 1200, 200)
+            index.upsert_note(
+                b,
+                "graph_via_ingest",
+                chunks=chunks_b,
+                embeddings=_empty_embeds(len(chunks_b)),
+            )
+
+            kw = dict(
+                query="how do I pay my Apple Card bill",
+                query_embedding=np.zeros(8, dtype=np.float32),
+                limit=5,
+            )
+            on_paths = [h.path for h in index.hybrid_search(**kw)]
+            assert "graph_via_ingest" in on_paths
+
+            index_off = MemoryIndex(
+                Path(":memory:"), dimensions=8, kg_extract_at_ingest=False
+            )
+            try:
+                index_off.upsert_note(
+                    a,
+                    "lexical",
+                    chunks=chunks_a,
+                    embeddings=_empty_embeds(len(chunks_a)),
+                )
+                index_off.upsert_note(
+                    b,
+                    "graph_via_ingest",
+                    chunks=chunks_b,
+                    embeddings=_empty_embeds(len(chunks_b)),
+                )
+                on = {h.path: h.score for h in index.hybrid_search(**kw)}
+                off = {h.path: h.score for h in index_off.hybrid_search(**kw)}
+                assert on["graph_via_ingest"] > off.get(
+                    "graph_via_ingest", 0.0
+                )
+            finally:
+                index_off.close()
         finally:
             index.close()
 
