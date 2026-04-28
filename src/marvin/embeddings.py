@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import math
 import re
 from typing import Protocol
 
 import numpy as np
+
+logger = logging.getLogger(__name__)
 
 TOKEN_RE = re.compile(r"[A-Za-z0-9_./:-]+")
 
@@ -71,6 +74,15 @@ class EmbeddingService:
         self._ensure_backend()
         return self._backend_name or "unknown"
 
+    @property
+    def loaded_backend_name(self) -> str | None:
+        """Backend name if already loaded; ``None`` if no eager init has happened.
+
+        Use this from health/status endpoints that must not pay a lazy
+        model-load cost just to report current state.
+        """
+        return self._backend_name
+
     def embed_text(self, text: str) -> np.ndarray:
         return self.embed_texts([text])[0]
 
@@ -83,14 +95,29 @@ class EmbeddingService:
         if self._backend is not None:
             return
 
+        fastembed_failed = False
         if self.provider in {"auto", "fastembed"}:
             try:
                 self._backend = FastEmbedBackend(self.model_name, self.dimensions)
                 self._backend_name = "fastembed"
                 return
-            except Exception:
+            except Exception as exc:
                 if self.provider == "fastembed":
                     raise
+                logger.warning(
+                    "FastEmbed initialisation failed (%s: %s); "
+                    "falling back to HashEmbeddingBackend.",
+                    type(exc).__name__,
+                    exc,
+                )
+                fastembed_failed = True
 
         self._backend = HashEmbeddingBackend(self.dimensions)
         self._backend_name = "hash"
+        if fastembed_failed:
+            logger.warning(
+                "EmbeddingService is using HashEmbeddingBackend: vectors are "
+                "deterministic but semantically random and will degrade hybrid "
+                "retrieval below BM25-only quality. Install fastembed (or set "
+                "MARVIN_EMBEDDING_PROVIDER=hash explicitly) to silence this."
+            )

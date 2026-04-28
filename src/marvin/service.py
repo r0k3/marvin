@@ -54,6 +54,44 @@ class MarvinService:
     def close(self) -> None:
         self.index.close()
 
+    def health(self) -> dict[str, object]:
+        """Return a snapshot of the runtime configuration.
+
+        Honest about lazy-loading: backends that have not yet been
+        initialised are reported as ``"<provider> (not loaded)"`` so this
+        method itself never triggers a model download.
+        """
+        embed_loaded = self.embedder.loaded_backend_name
+        embedding_backend = (
+            embed_loaded
+            if embed_loaded is not None
+            else f"{self.settings.embedding_provider} (not loaded)"
+        )
+
+        if not self.settings.rerank_enabled:
+            reranker_backend = "disabled"
+        else:
+            rerank_loaded = self.reranker.loaded_backend_name
+            reranker_backend = (
+                rerank_loaded
+                if rerank_loaded is not None
+                else f"{self.settings.rerank_provider} (not loaded)"
+            )
+
+        return {
+            "embedding_backend": embedding_backend,
+            "embedding_provider": self.settings.embedding_provider,
+            "embedding_model": self.settings.embedding_model,
+            "embedding_dimensions": self.settings.embedding_dimensions,
+            "rerank_enabled": self.settings.rerank_enabled,
+            "rerank_provider": self.settings.rerank_provider,
+            "rerank_model": self.settings.rerank_model,
+            "rerank_depth": self.settings.rerank_depth,
+            "reranker_backend": reranker_backend,
+            "vault_path": str(self.settings.resolved_vault_path),
+            "index_path": str(self.settings.index_path),
+        }
+
     def sync(self) -> SyncReport:
         report = SyncReport()
         existing_paths: set[str] = set()
