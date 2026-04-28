@@ -49,9 +49,48 @@ class MarvinSettings(BaseSettings):
     # because hydration is cheap and the stream silently contributes
     # nothing on vaults that have not yet been wikilink-consolidated.
     # ``kg_rrf_k`` is the RRF damping constant used when fusing the
-    # chunk-tier note ranking with the graph note ranking.
+    # chunk-tier note ranking with the graph note ranking;
+    # ``kg_fusion_weight`` scales the graph stream's RRF score (< 1
+    # keeps strong chunk matches from being displaced by noisy entity
+    # signal; 1.0 = symmetric fusion).
     kg_enabled: bool = Field(default=True)
     kg_rrf_k: float = Field(default=60.0, gt=0.0)
+    kg_fusion_weight: float = Field(default=0.5, ge=0.0)
+
+    # At-ingest entity extraction. Augments ``metadata.links`` (which
+    # only carries explicit ``[[wikilinks]]`` produced by the
+    # consolidator) with capitalised noun phrases pulled from the body
+    # via a regex extractor.
+    #
+    # Default: ``False``. The regex extractor is empirically a wash to
+    # mildly harmful on chat-style benchmarks (LongMemEval-S 100q:
+    # multi-session R@5 -7pp; single-session unchanged) because most
+    # capitalised tokens in chat data are sentence-starter
+    # imperatives, not entities, and the few real entities a query
+    # references rarely line up with what the regex finds in the
+    # haystack. Wikilinks-only Phase 1A behaviour is silent on such
+    # data and matches the chunk-only baseline exactly.
+    #
+    # Enable when:
+    #   * the vault has been wikilink-consolidated (the LLM extractor
+    #     has run) and you want freshly-ingested notes to also
+    #     contribute graph signal before the next consolidation pass,
+    #     OR
+    #   * the source text is curated (docs, research notes) where
+    #     capitalisation reliably marks proper nouns.
+    kg_extract_at_ingest: bool = Field(default=False)
+    # Drop entities shorter than this many characters; raise to suppress
+    # sentence-starter noise like ``The``, ``His`` (default keeps the
+    # ``len > 2`` policy used by the existing LLM extraction path).
+    kg_ingest_min_length: int = Field(default=3, ge=1)
+    # Drop single-word at-ingest extractions (``True`` by default).
+    # Capitalised single words on chat-style data are dominated by
+    # sentence-starter verbs and modal auxiliaries (``Remember``,
+    # ``However``, ``Can``, ``Did``); a multi-word policy keeps phrases
+    # like ``Apple Card`` or ``Western Australia`` while throwing the
+    # noise out wholesale. Set to ``false`` if you trust the source
+    # text (curated docs, code) and want single-word proper nouns too.
+    kg_ingest_multiword_only: bool = Field(default=True)
 
     @property
     def resolved_vault_path(self) -> Path:

@@ -90,12 +90,50 @@ entities via case-fold word-boundary matching, and notes linking to
 those entities are ranked by total edge weight. The graph note
 ranking is RRF-fused with the chunk-tier note ranking before reranking.
 
-The stream is silently a no-op on vaults that have not yet been
-wikilink-consolidated (such as raw LongMemEval-S haystacks where chat
-sessions have no `[[wikilinks]]`); enable at-ingest extraction in a
-follow-up to populate the graph for unconsolidated content. Toggle
-via `MARVIN_KG_ENABLED=false` if you want to ablate it; tune the
-fusion damping with `MARVIN_KG_RRF_K` (default `60.0`).
+An optional regex-based fallback extractor (`MARVIN_KG_EXTRACT_AT_INGEST=true`,
+default `false`) populates entities from the body of unconsolidated
+notes (chat sessions, freshly-pasted markdown). Enabling it adds a
+multi-word capitalised noun phrase pass (`Apple Card`, `Western Australia`)
+behind a stop-word filter that drops sentence-fragment phrases like
+`But I` or `Once I`. We default it off because LongMemEval-S is
+chat-style data: capitalised tokens are dominated by sentence-starter
+imperatives (`Remember`, `However`, `Did`) rather than entities, and
+the few real entities a query references rarely line up with what the
+regex finds in the haystack. The empirical impact on the 100-question
+slice (hash embedder, hybrid mode):
+
+| | kg off | kg + wikilinks-only (default) | kg + wikilinks + at-ingest |
+|---|---|---|---|
+| R@5 | 86.0% | 86.0% | 84.0% (-2pp) |
+| R@10 | 90.0% | 90.0% | 90.0% |
+| NDCG@10 | 69.3% | 69.3% | 68.9% (-0.4pp) |
+| MRR | 68.1% | 68.1% | 67.7% (-0.4pp) |
+| multi-session R@5 | 90.0% | 90.0% | 83.3% (-7pp) |
+| single-session R@5 | 84.3% | 84.3% | 84.3% |
+
+Wikilinks-only graph (Phase 1A) is silent on raw chat data and
+matches the chunk-only baseline exactly. Enable at-ingest when:
+
+* the vault is wikilink-consolidated and you want freshly-ingested
+  notes to contribute graph signal before the next consolidation
+  pass;
+* the source text is curated (docs, research notes) where
+  capitalisation reliably marks proper nouns.
+
+Toggles, all `MARVIN_KG_*` env vars or fields on `MarvinSettings`:
+
+| setting | default | purpose |
+|---|---|---|
+| `kg_enabled` | `true` | toggle the third stream entirely |
+| `kg_rrf_k` | `60.0` | RRF damping constant |
+| `kg_fusion_weight` | `0.5` | graph-stream weight in fusion (`< 1` keeps strong chunk matches from being displaced) |
+| `kg_extract_at_ingest` | `false` | regex fallback entity extraction |
+| `kg_ingest_min_length` | `3` | drop short capitalised tokens |
+| `kg_ingest_multiword_only` | `true` | drop single-word at-ingest entities |
+
+The graph ranker is IDF-weighted (`log((N+1)/(df+0.5))`) so common
+entities (the speaker's name, the platform brand) contribute little
+and rare entities a lot, mirroring BM25's term weighting.
 
 ### Baseline numbers
 

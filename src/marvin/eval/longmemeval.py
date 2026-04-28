@@ -315,9 +315,9 @@ def _chunk_rows_for_mode(
 
 
 @contextmanager
-def _ephemeral_index(dimensions: int):
+def _ephemeral_index(dimensions: int, **index_kwargs: object):
     """In-memory MemoryIndex that gets torn down on exit."""
-    index = MemoryIndex(Path(":memory:"), dimensions=dimensions)
+    index = MemoryIndex(Path(":memory:"), dimensions=dimensions, **index_kwargs)
     try:
         yield index
     finally:
@@ -336,13 +336,14 @@ def _run_question(
     max_embed_chars: int,
     reranker: RerankerService | None = None,
     rerank_depth: int = 50,
+    index_options: dict[str, object] | None = None,
 ) -> QuestionResult:
     import numpy as np
 
     needs_vectors = mode in {"vector", "hybrid"}
     started = time.perf_counter()
 
-    with _ephemeral_index(embedder.dimensions) as index:
+    with _ephemeral_index(embedder.dimensions, **(index_options or {})) as index:
         # Build chunks for every session up front, then embed in one big
         # batch. fastembed has substantial per-call overhead and
         # superlinear scaling on long inputs, so this is materially faster
@@ -484,6 +485,7 @@ def run_benchmark(
     top_k: int = 20,
     max_embed_chars: int = 512,
     progress: int = 0,
+    index_options: dict[str, object] | None = None,
 ) -> BenchSummary:
     """Run the benchmark on ``entries`` and return an aggregated summary.
 
@@ -523,6 +525,7 @@ def run_benchmark(
             top_k=top_k,
             vault_root=vault_root,
             max_embed_chars=max_embed_chars,
+            index_options=index_options,
         )
         results.append(result)
 
