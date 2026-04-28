@@ -346,3 +346,252 @@ class TestKgSchemaAndHydration:
             assert edges == 1
         finally:
             index.close()
+
+
+class TestKgResolveQueryEntities:
+    def _seeded_index(self, links_per_note: dict[str, list[str]]) -> MemoryIndex:
+        index = MemoryIndex(Path(":memory:"), dimensions=8)
+        for path, links in links_per_note.items():
+            note = _make_note(path, path, links=links)
+            chunks = chunk_markdown(note, 1200, 200)
+            index.upsert_note(
+                note, path, chunks=chunks, embeddings=_empty_embeds(len(chunks))
+            )
+        return index
+
+    def test_returns_empty_for_unknown_query(self) -> None:
+        index = self._seeded_index({"a": ["Quokka"]})
+        try:
+            assert index._resolve_query_entities("nothing matches here") == []
+        finally:
+            index.close()
+
+    def test_matches_case_insensitively(self) -> None:
+        index = self._seeded_index({"a": ["Quokka"]})
+        try:
+            assert len(index._resolve_query_entities("Tell me about a QUOKKA.")) == 1
+            assert len(index._resolve_query_entities("show me the quokka")) == 1
+        finally:
+            index.close()
+
+    def test_matches_multi_word_entity(self) -> None:
+        index = self._seeded_index({"a": ["Apple Card"]})
+        try:
+            ids = index._resolve_query_entities("how do I pay my apple card bill")
+            assert len(ids) == 1
+        finally:
+            index.close()
+
+    def test_word_boundary_avoids_partial_matches(self) -> None:
+        index = self._seeded_index({"a": ["Java"]})
+        try:
+            assert index._resolve_query_entities("javascript is fun") == []
+            assert len(index._resolve_query_entities("I love Java code")) == 1
+        finally:
+            index.close()
+
+    def test_multiple_entities_match(self) -> None:
+        index = self._seeded_index({
+            "a": ["Quokka"],
+            "b": ["Australia"],
+            "c": ["Wombat"],
+        })
+        try:
+            ids = index._resolve_query_entities(
+                "where in australia does a quokka live"
+            )
+            assert len(ids) == 2
+        finally:
+            index.close()
+
+    def test_empty_registry_short_circuits(self) -> None:
+        index = MemoryIndex(Path(":memory:"), dimensions=8)
+        try:
+            assert index._resolve_query_entities("anything") == []
+        finally:
+            index.close()
+
+
+class TestKgGraphRanker:
+    def _seed_for_overlap(self, index: MemoryIndex) -> dict[str, list[str]]:
+        layout = {
+            "two_hits": ["Quokka", "Australia"],
+            "one_hit": ["Quokka"],
+            "no_hits": ["Wombat"],
+        }
+        for path, links in layout.items():
+            note = _make_note(path, path, links=links)
+            chunks = chunk_markdown(note, 1200, 200)
+            index.upsert_note(
+                note, path, chunks=chunks, embeddings=_empty_embeds(len(chunks))
+            )
+        return layout
+
+    def test_ranks_by_total_edge_weight(self) -> None:
+        index = MemoryIndex(Path(":memory:"), dimensions=8)
+        try:
+            self._seed_for_overlap(index)
+            ids = index._resolve_query_entities("quokka in australia")
+            rows = index._graph_hits(query_entity_ids=ids, limit=10, kind=None)
+            paths = [row["relative_path"] for row in rows]
+            scores = [row["raw_score"] for row in rows]
+            assert paths[0] == "two_hits"
+            assert "no_hits" not in paths
+            assert scores[0] > scores[1]
+        finally:
+            index.close()
+
+    def test_kind_filter_applies(self) -> None:
+        index = MemoryIndex(Path(":memory:"), dimensions=8)
+        try:
+            for path, kind in (
+                ("sem", MemoryKind.SEMANTIC),
+                ("proc", MemoryKind.PROCEDURAL),
+            ):
+                note = _make_note(path, path, kind=kind, links=["Quokka"])
+                chunks = chunk_markdown(note, 1200, 200)
+                index.upsert_note(
+                    note, path, chunks=chunks, embeddings=_empty_embeds(len(chunks))
+                )
+
+            ids = index._resolve_query_entities("quokka")
+            sem_rows = index._graph_hits(
+                query_entity_ids=ids, limit=10, kind=MemoryKind.SEMANTIC
+            )
+            assert [row["relative_path"] for row in sem_rows] == ["sem"]
+        finally:
+            index.close()
+
+    def test_empty_query_entities_returns_empty(self) -> None:
+        index = MemoryIndex(Path(":memory:"), dimensions=8)
+        try:
+            assert index._graph_hits(
+                query_entity_ids=[], limit=10, kind=None
+            ) == []
+        finally:
+            index.close()
+
+
+class TestKgHybridFusion:
+    """End-to-end fusion: chunk-tier RRF + graph stream as a third RRF stream."""
+
+    QUERY = "Quokka information"
+
+    def _seed_two_notes(self, index: MemoryIndex) -> None:
+        # Note A: chunks lexically match the query. No wikilinks.
+        a = _make_note(
+            "lexical_only",
+            "Quokka information lives here",
+            links=[],
+        )
+        chunks_a = chunk_markdown(a, 1200, 200)
+        index.upsert_note(
+            a, "lexical_only", chunks=chunks_a, embeddings=_empty_embeds(len(chunks_a))
+        )
+
+        # Note B: chunk does NOT contain the query token; only a wikilink
+        # connects it to the query entity. Must still surface via the
+        # graph stream.
+        b = _make_note(
+            "graph_only",
+            "Wombat habits: extensive burrowing and grass-grazing",
+            links=["Quokka"],
+        )
+        chunks_b = chunk_markdown(b, 1200, 200)
+        index.upsert_note(
+            b, "graph_only", chunks=chunks_b, embeddings=_empty_embeds(len(chunks_b))
+        )
+
+    def test_graph_only_note_surfaces_in_results(self) -> None:
+        index = MemoryIndex(Path(":memory:"), dimensions=8)
+        try:
+            self._seed_two_notes(index)
+            hits = index.hybrid_search(
+                query=self.QUERY,
+                query_embedding=np.zeros(8, dtype=np.float32),
+                limit=5,
+            )
+            paths = [hit.path for hit in hits]
+            assert "lexical_only" in paths
+            assert "graph_only" in paths
+        finally:
+            index.close()
+
+    def test_graph_stream_boosts_score_for_linked_note(self) -> None:
+        """The graph stream must add an RRF contribution: with kg enabled
+        ``graph_only``'s final score must exceed its score with kg
+        disabled (where it can only ride on first-stage over-fetch)."""
+        index_on = MemoryIndex(
+            Path(":memory:"), dimensions=8, kg_enabled=True
+        )
+        index_off = MemoryIndex(
+            Path(":memory:"), dimensions=8, kg_enabled=False
+        )
+        try:
+            self._seed_two_notes(index_on)
+            self._seed_two_notes(index_off)
+
+            kwargs = dict(
+                query=self.QUERY,
+                query_embedding=np.zeros(8, dtype=np.float32),
+                limit=5,
+            )
+            on = {h.path: h.score for h in index_on.hybrid_search(**kwargs)}
+            off = {h.path: h.score for h in index_off.hybrid_search(**kwargs)}
+
+            assert "graph_only" in on
+            assert on["graph_only"] > off.get("graph_only", 0.0)
+        finally:
+            index_on.close()
+            index_off.close()
+
+    def test_graph_disabled_short_circuits(self) -> None:
+        index = MemoryIndex(
+            Path(":memory:"), dimensions=8, kg_enabled=False
+        )
+        try:
+            self._seed_two_notes(index)
+            with (
+                patch.object(
+                    index, "_graph_hits", wraps=index._graph_hits
+                ) as graph_spy,
+                patch.object(
+                    index,
+                    "_resolve_query_entities",
+                    wraps=index._resolve_query_entities,
+                ) as resolve_spy,
+            ):
+                index.hybrid_search(
+                    query=self.QUERY,
+                    query_embedding=np.zeros(8, dtype=np.float32),
+                    limit=5,
+                )
+            graph_spy.assert_not_called()
+            resolve_spy.assert_not_called()
+        finally:
+            index.close()
+
+    def test_no_wikilinks_no_change(self) -> None:
+        """Regression: when no notes carry wikilinks, the third stream
+        contributes nothing and rankings match the previous behaviour."""
+        index = MemoryIndex(Path(":memory:"), dimensions=8)
+        try:
+            for path, body in [
+                ("a", "the quokka is a marsupial"),
+                ("b", "wombats are also marsupials"),
+                ("c", "kangaroos can hop very far"),
+            ]:
+                note = _make_note(path, body, links=[])
+                chunks = chunk_markdown(note, 1200, 200)
+                index.upsert_note(
+                    note, path, chunks=chunks, embeddings=_empty_embeds(len(chunks))
+                )
+
+            hits = index.hybrid_search(
+                query="quokka marsupial",
+                query_embedding=np.zeros(8, dtype=np.float32),
+                limit=5,
+            )
+            assert hits[0].path == "a"
+        finally:
+            index.close()
