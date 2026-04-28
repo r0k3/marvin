@@ -1,4 +1,5 @@
 from pathlib import Path
+from unittest.mock import patch
 
 from marvin.config import MarvinSettings
 from marvin.models import MemoryKind, SearchHit
@@ -125,6 +126,108 @@ def test_service_search_rerank_disabled_by_default(tmp_path: Path):
     # Plain no-op service uses the noop backend.
     assert service.reranker.backend_name == "noop"
     service.close()
+
+
+class TestPrepareSessionUnified:
+    """``prepare_session`` must run one sync, one embed, one rerank pass."""
+
+    def _seed(self, service: MarvinService) -> None:
+        service.remember_semantic(
+            concept="Logging",
+            content="Use stdlib logging in Python projects.",
+        )
+        service.store_procedure(
+            title="Bootstrap a Python repo",
+            steps=["init git", "uv init", "add tests"],
+        )
+        service.reflect(
+            title="Avoid ad-hoc print statements",
+            insight="Switch to logging early; print breaks under MCP transports.",
+        )
+        service.log_episode(
+            title="Recent debugging episode",
+            summary="Tracked a flaky test for an hour.",
+        )
+
+    def test_returns_per_kind_buckets(self, tmp_path: Path) -> None:
+        settings = MarvinSettings(
+            vault_path=tmp_path / "vault",
+            state_dir=tmp_path / ".state",
+            embedding_provider="hash",
+        )
+        service = MarvinService(settings)
+        try:
+            self._seed(service)
+            ctx = service.prepare_session(
+                task="how do I structure logging in a new Python project?",
+                limit=6,
+            )
+            kinds = {hit.kind for hit in ctx.procedural}
+            assert kinds <= {MemoryKind.PROCEDURAL}
+            assert {hit.kind for hit in ctx.semantic} <= {MemoryKind.SEMANTIC}
+            assert {hit.kind for hit in ctx.reflective} <= {MemoryKind.REFLECTIVE}
+            assert any(
+                hit.kind == MemoryKind.EPISODIC for hit in ctx.recent_episodes
+            )
+            assert ctx.task.startswith("how do I structure logging")
+        finally:
+            service.close()
+
+    def test_calls_sync_and_embed_exactly_once(self, tmp_path: Path) -> None:
+        settings = MarvinSettings(
+            vault_path=tmp_path / "vault",
+            state_dir=tmp_path / ".state",
+            embedding_provider="hash",
+        )
+        service = MarvinService(settings)
+        try:
+            self._seed(service)
+            with (
+                patch.object(service, "sync", wraps=service.sync) as sync_spy,
+                patch.object(
+                    service.embedder,
+                    "embed_text",
+                    wraps=service.embedder.embed_text,
+                ) as embed_spy,
+            ):
+                service.prepare_session(task="anything", limit=6)
+            assert sync_spy.call_count == 1
+            assert embed_spy.call_count == 1
+        finally:
+            service.close()
+
+    def test_reranker_invoked_once_when_enabled(self, tmp_path: Path) -> None:
+        settings = MarvinSettings(
+            vault_path=tmp_path / "vault",
+            state_dir=tmp_path / ".state",
+            embedding_provider="hash",
+            rerank_enabled=True,
+            rerank_depth=10,
+        )
+        service = MarvinService(settings)
+        service.reranker = _FakeReranker(marker="LOG_MARKER")
+        try:
+            service.remember_semantic(
+                concept="Logging",
+                content="Use logging LOG_MARKER consistently.",
+            )
+            service.store_procedure(
+                title="Setup logging",
+                steps=["import logging", "set level"],
+            )
+            service.reflect(
+                title="Reflection on logging",
+                insight="Always log at module scope.",
+            )
+
+            with patch.object(
+                service.reranker, "score", wraps=service.reranker.score
+            ) as score_spy:
+                service.prepare_session(task="how to log in python", limit=6)
+            # Single rerank pass over the merged pool, not three.
+            assert score_spy.call_count == 1
+        finally:
+            service.close()
 
 
 class TestServiceHealth:

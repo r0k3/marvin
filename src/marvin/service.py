@@ -3,6 +3,8 @@ from __future__ import annotations
 from collections.abc import Iterable
 from pathlib import Path
 
+import numpy as np
+
 from .broker import MarvinBroker
 from .config import MarvinSettings
 from .embeddings import EmbeddingService
@@ -120,13 +122,34 @@ class MarvinService:
         self.sync()
         effective_limit = limit or self.settings.search_limit
         query_embedding = self.embedder.embed_text(query)
+        return self._search_pool(
+            query=query,
+            query_embedding=query_embedding,
+            kind=kind,
+            limit=effective_limit,
+        )
+
+    def _search_pool(
+        self,
+        *,
+        query: str,
+        query_embedding: np.ndarray,
+        kind: MemoryKind | None,
+        limit: int,
+    ) -> list[SearchHit]:
+        """First-stage hybrid retrieval, optionally followed by reranking.
+
+        Caller owns ``sync()`` and ``embed_text()``. This shared core lets
+        :meth:`search` and :meth:`prepare_session` issue a single index
+        round-trip (and a single rerank pass) instead of one per kind.
+        """
         if self.settings.rerank_enabled:
             # Over-fetch with the hybrid ranker, then let the cross-encoder
             # reorder the top pool before returning the final top-K. We ask
             # the index for the full chunk text (not just excerpt) so the
             # reranker has the real matched window to score, and strip it
             # on return to keep the wire payload compact.
-            pool_size = max(effective_limit, self.settings.rerank_depth)
+            pool_size = max(limit, self.settings.rerank_depth)
             pool = self.index.hybrid_search(
                 query=query,
                 query_embedding=query_embedding,
@@ -134,11 +157,13 @@ class MarvinService:
                 kind=kind,
                 include_chunk_text=True,
             )
+            if not pool:
+                return []
             docs = [(hit.chunk_text or hit.excerpt or hit.title) for hit in pool]
             scores = self.reranker.score(query, docs)
             order = sorted(
                 range(len(pool)), key=lambda i: (-scores[i], i)
-            )[:effective_limit]
+            )[:limit]
             return [
                 pool[i].model_copy(
                     update={"score": round(scores[i], 6), "chunk_text": None}
@@ -148,7 +173,7 @@ class MarvinService:
         return self.index.hybrid_search(
             query=query,
             query_embedding=query_embedding,
-            limit=effective_limit,
+            limit=limit,
             kind=kind,
         )
 
@@ -278,10 +303,41 @@ class MarvinService:
             query_terms.extend([tech for tech in technologies if tech.strip()])
         query = " ".join(term for term in query_terms if term)
 
-        procedural = self.search(query, kind=MemoryKind.PROCEDURAL, limit=max(2, limit // 2))
-        semantic = self.search(query, kind=MemoryKind.SEMANTIC, limit=max(2, limit // 2))
-        reflective = self.search(query, kind=MemoryKind.REFLECTIVE, limit=max(1, limit // 3))
-        recent_episodes = self.recent(kind=MemoryKind.EPISODIC, limit=max(2, limit // 3))
+        procedural_limit = max(2, limit // 2)
+        semantic_limit = max(2, limit // 2)
+        reflective_limit = max(1, limit // 3)
+        # Pool size needs to cover all three kinds; over-fetch generously so
+        # under-represented kinds still surface a few hits after partitioning.
+        pool_limit = max(
+            procedural_limit + semantic_limit + reflective_limit,
+            3 * limit,
+            20,
+        )
+
+        # Single sync, single query embedding, single first-stage + rerank pass.
+        self.sync()
+        query_embedding = self.embedder.embed_text(query)
+        pool = self._search_pool(
+            query=query,
+            query_embedding=query_embedding,
+            kind=None,
+            limit=pool_limit,
+        )
+
+        procedural = [h for h in pool if h.kind == MemoryKind.PROCEDURAL][
+            :procedural_limit
+        ]
+        semantic = [h for h in pool if h.kind == MemoryKind.SEMANTIC][
+            :semantic_limit
+        ]
+        reflective = [h for h in pool if h.kind == MemoryKind.REFLECTIVE][
+            :reflective_limit
+        ]
+        # Bypass `self.recent()` so we don't pay for a second sync on the
+        # same already-current vault.
+        recent_episodes = self.index.recent(
+            limit=max(2, limit // 3), kind=MemoryKind.EPISODIC
+        )
         guidance = self._derive_guidance(procedural, semantic, reflective)
 
         return SessionContext(
