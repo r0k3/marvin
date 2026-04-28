@@ -299,6 +299,8 @@ class TestServiceHealth:
                 "rerank_model",
                 "rerank_depth",
                 "reranker_backend",
+                "kg_enabled",
+                "kg_rrf_k",
                 "vault_path",
                 "index_path",
             ):
@@ -306,6 +308,8 @@ class TestServiceHealth:
             assert isinstance(payload["embedding_dimensions"], int)
             assert isinstance(payload["rerank_enabled"], bool)
             assert isinstance(payload["rerank_depth"], int)
+            assert isinstance(payload["kg_enabled"], bool)
+            assert isinstance(payload["kg_rrf_k"], float)
         finally:
             service.close()
 

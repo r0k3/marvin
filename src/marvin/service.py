@@ -54,6 +54,8 @@ class MarvinService:
             dimensions=self.settings.embedding_dimensions,
             first_stage_overfetch=self.settings.first_stage_overfetch,
             first_stage_overfetch_min=self.settings.first_stage_overfetch_min,
+            kg_enabled=self.settings.kg_enabled,
+            kg_rrf_k=self.settings.kg_rrf_k,
         )
 
     def close(self) -> None:
@@ -93,6 +95,8 @@ class MarvinService:
             "rerank_model": self.settings.rerank_model,
             "rerank_depth": self.settings.rerank_depth,
             "reranker_backend": reranker_backend,
+            "kg_enabled": self.settings.kg_enabled,
+            "kg_rrf_k": self.settings.kg_rrf_k,
             "vault_path": str(self.settings.resolved_vault_path),
             "index_path": str(self.settings.index_path),
         }
