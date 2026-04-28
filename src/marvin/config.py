@@ -45,6 +45,14 @@ class MarvinSettings(BaseSettings):
     first_stage_overfetch: int = Field(default=5, ge=1)
     first_stage_overfetch_min: int = Field(default=20, ge=1)
 
+    # K-Lines graph retrieval as a third RRF stream. Enabled by default
+    # because hydration is cheap and the stream silently contributes
+    # nothing on vaults that have not yet been wikilink-consolidated.
+    # ``kg_rrf_k`` is the RRF damping constant used when fusing the
+    # chunk-tier note ranking with the graph note ranking.
+    kg_enabled: bool = Field(default=True)
+    kg_rrf_k: float = Field(default=60.0, gt=0.0)
+
     @property
     def resolved_vault_path(self) -> Path:
         return self.vault_path.expanduser().resolve()

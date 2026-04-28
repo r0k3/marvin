@@ -79,6 +79,24 @@ work. When `--rerank` is enabled, `--rerank-depth` is the second-stage
 pool size; if it exceeds what RRF can produce given the per-stream
 limit, the reranker gets fewer candidates than requested.
 
+#### K-Lines graph stream
+
+The `hybrid` mode is actually a three-stream pipeline: FTS5 +
+`sqlite-vec` (chunk-level, max-pooled to notes) and a third *graph*
+stream that ranks notes by edge weight to query entities. Wikilinks
+extracted from note bodies (`[[Apple Card]]`) populate an
+`entity_edges` table during indexing; query terms are resolved to
+entities via case-fold word-boundary matching, and notes linking to
+those entities are ranked by total edge weight. The graph note
+ranking is RRF-fused with the chunk-tier note ranking before reranking.
+
+The stream is silently a no-op on vaults that have not yet been
+wikilink-consolidated (such as raw LongMemEval-S haystacks where chat
+sessions have no `[[wikilinks]]`); enable at-ingest extraction in a
+follow-up to populate the graph for unconsolidated content. Toggle
+via `MARVIN_KG_ENABLED=false` if you want to ablate it; tune the
+fusion damping with `MARVIN_KG_RRF_K` (default `60.0`).
+
 ### Baseline numbers
 
 Run on commit `feature/eval-longmemeval`, multi-core CPU, no GPU,
