@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 from collections import defaultdict
 from hashlib import sha256
@@ -108,6 +109,8 @@ class MemoryIndex:
         *,
         first_stage_overfetch: int = 5,
         first_stage_overfetch_min: int = 20,
+        kg_enabled: bool = True,
+        kg_rrf_k: float = 60.0,
     ) -> None:
         self.db_path = db_path
         self.dimensions = dimensions
@@ -117,6 +120,11 @@ class MemoryIndex:
         # more SQL work per query.
         self.first_stage_overfetch = max(1, first_stage_overfetch)
         self.first_stage_overfetch_min = max(1, first_stage_overfetch_min)
+        # K-Lines graph stream toggles and RRF damping constant. Defaults
+        # to enabled because hydration is cheap and the stream silently
+        # contributes nothing when no entities exist.
+        self.kg_enabled = kg_enabled
+        self.kg_rrf_k = kg_rrf_k
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self.conn = sqlite3.connect(self.db_path)
         self.conn.row_factory = sqlite3.Row
@@ -312,6 +320,22 @@ class MemoryIndex:
         *,
         include_chunk_text: bool = False,
     ) -> list[SearchHit]:
+        """Three-stream retrieval: vec + FTS chunks fused, then RRF-fused with graph.
+
+        Two tiers:
+
+        1. Chunk-level RRF over ``_vector_hits`` and ``_fts_hits``;
+           max-pool chunk scores back to notes.
+        2. Note-level RRF that fuses the chunk-tier note ranking with the
+           K-Lines graph stream (``_graph_hits``). This is what lets a
+           note surface even when none of its chunks lexically or
+           semantically match the query, as long as it links to the
+           query entities.
+
+        When ``kg_enabled`` is ``False`` or no query entities resolve,
+        the graph stream contributes nothing and the result reduces to
+        the previous behaviour.
+        """
         per_stream_limit = max(
             limit * self.first_stage_overfetch,
             self.first_stage_overfetch_min,
@@ -323,7 +347,7 @@ class MemoryIndex:
 
         scores: dict[int, float] = defaultdict(float)
         details: dict[int, sqlite3.Row] = {}
-        rrf_k = 60.0
+        rrf_k = self.kg_rrf_k
 
         for rank, row in enumerate(vec_hits, start=1):
             chunk_id = row["chunk_id"]
@@ -335,26 +359,81 @@ class MemoryIndex:
             scores[chunk_id] += 1.0 / (rrf_k + rank)
             details[chunk_id] = row
 
-        note_scores: dict[str, float] = defaultdict(float)
+        note_chunk_score: dict[str, float] = defaultdict(float)
         note_best_chunk: dict[str, sqlite3.Row] = {}
         for chunk_id, score in scores.items():
             row = details[chunk_id]
             relative_path = row["relative_path"]
-            note_scores[relative_path] = max(note_scores[relative_path], score)
-            existing = note_best_chunk.get(relative_path)
-            if existing is None or score > note_scores.get(relative_path, 0.0):
+            if score > note_chunk_score[relative_path]:
+                note_chunk_score[relative_path] = score
                 note_best_chunk[relative_path] = row
 
-        sorted_paths = sorted(note_scores, key=lambda path: note_scores[path], reverse=True)[:limit]
+        chunk_ranking = sorted(
+            note_chunk_score.items(), key=lambda kv: -kv[1]
+        )
+
+        graph_ranking: list[tuple[str, float]] = []
+        if self.kg_enabled:
+            query_entity_ids = self._resolve_query_entities(query)
+            if query_entity_ids:
+                graph_rows = self._graph_hits(
+                    query_entity_ids=query_entity_ids,
+                    limit=per_stream_limit,
+                    kind=kind,
+                )
+                graph_ranking = [
+                    (row["relative_path"], float(row["raw_score"]))
+                    for row in graph_rows
+                ]
+                # Backfill best-chunk metadata for notes that the graph
+                # stream surfaced but the chunk-tier missed; otherwise
+                # they have no excerpt to render.
+                missing = [
+                    path for path, _ in graph_ranking if path not in note_best_chunk
+                ]
+                if missing:
+                    fill_sql = """
+                        SELECT
+                            c.id AS chunk_id,
+                            n.relative_path,
+                            n.title,
+                            n.kind,
+                            n.tags_json,
+                            n.links_json,
+                            c.text
+                        FROM chunks c
+                        JOIN notes n ON n.id = c.note_id
+                        WHERE n.relative_path IN ({placeholders})
+                          AND c.chunk_index = 0
+                    """.format(
+                        placeholders=",".join("?" for _ in missing)
+                    )
+                    for row in self.conn.execute(fill_sql, missing).fetchall():
+                        note_best_chunk[row["relative_path"]] = row
+
+        # Second-tier RRF: chunk-fused note ranking + graph note ranking.
+        final_scores: dict[str, float] = defaultdict(float)
+        for rank, (path, _) in enumerate(chunk_ranking, start=1):
+            final_scores[path] += 1.0 / (rrf_k + rank)
+        for rank, (path, _) in enumerate(graph_ranking, start=1):
+            final_scores[path] += 1.0 / (rrf_k + rank)
+
+        sorted_paths = sorted(
+            final_scores, key=lambda path: final_scores[path], reverse=True
+        )[:limit]
         hits: list[SearchHit] = []
         for path in sorted_paths:
-            row = note_best_chunk[path]
+            row = note_best_chunk.get(path)
+            if row is None:
+                # Defensive: should not happen given the backfill above,
+                # but guard against schema drift / empty-chunk notes.
+                continue
             hits.append(
                 SearchHit(
                     title=row["title"],
                     kind=MemoryKind(row["kind"]),
                     path=row["relative_path"],
-                    score=round(note_scores[path], 6),
+                    score=round(final_scores[path], 6),
                     excerpt=_excerpt(row["text"]),
                     tags=json.loads(row["tags_json"] or "[]"),
                     links=json.loads(row["links_json"] or "[]"),
@@ -362,6 +441,69 @@ class MemoryIndex:
                 )
             )
         return hits
+
+    def _resolve_query_entities(self, query: str) -> list[int]:
+        """Return entity ids whose normalized form appears (word-bounded) in ``query``.
+
+        Linear scan over the entity registry. Acceptable up to several
+        thousand entities; profile and switch to a precompiled regex
+        alternation or trie if a real vault outgrows that.
+        """
+        rows = self.conn.execute(
+            "SELECT id, normalized FROM entities"
+        ).fetchall()
+        if not rows:
+            return []
+        casefold_query = query.casefold()
+        matched: list[int] = []
+        for row in rows:
+            normalized = row["normalized"] or ""
+            if not normalized:
+                continue
+            if re.search(
+                r"\b" + re.escape(normalized) + r"\b", casefold_query
+            ):
+                matched.append(row["id"])
+        return matched
+
+    def _graph_hits(
+        self,
+        *,
+        query_entity_ids: list[int],
+        limit: int,
+        kind: MemoryKind | None,
+    ) -> list[sqlite3.Row]:
+        """Notes ranked by total edge-weight to any of ``query_entity_ids``.
+
+        One-hop direct overlap: a note that links to two query entities
+        scores higher than one that links to a single query entity. The
+        returned rows include the raw score for transparency / debugging
+        but only the rank position is what feeds RRF.
+        """
+        if not query_entity_ids:
+            return []
+        placeholders = ",".join("?" for _ in query_entity_ids)
+        sql = f"""
+            SELECT
+                n.id AS note_id,
+                n.relative_path,
+                n.title,
+                n.kind,
+                n.tags_json,
+                n.links_json,
+                COUNT(*) AS overlap,
+                SUM(ee.weight) AS raw_score
+            FROM entity_edges ee
+            JOIN notes n ON n.id = ee.note_id
+            WHERE ee.entity_id IN ({placeholders})
+        """
+        params: list[object] = list(query_entity_ids)
+        if kind is not None:
+            sql += " AND n.kind = ?"
+            params.append(kind.value)
+        sql += " GROUP BY n.id ORDER BY raw_score DESC LIMIT ?"
+        params.append(limit)
+        return self.conn.execute(sql, params).fetchall()
 
     def _vector_hits(
         self, *, query_embedding: np.ndarray, limit: int, kind: MemoryKind | None
