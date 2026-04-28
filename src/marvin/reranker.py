@@ -154,6 +154,15 @@ class RerankerService:
         return self._backend_name or "unknown"
 
     @property
+    def loaded_backend_name(self) -> str | None:
+        """Backend name if already loaded; ``None`` if no eager init has happened.
+
+        Use this from health/status endpoints that must not pay a lazy
+        model-load cost just to report current state.
+        """
+        return self._backend_name
+
+    @property
     def is_real(self) -> bool:
         return self.backend_name not in {"noop", "unknown"}
 

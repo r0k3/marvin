@@ -127,6 +127,86 @@ def test_service_search_rerank_disabled_by_default(tmp_path: Path):
     service.close()
 
 
+class TestServiceHealth:
+    def test_reports_provider_before_load(self, tmp_path: Path) -> None:
+        settings = MarvinSettings(
+            vault_path=tmp_path / "vault",
+            state_dir=tmp_path / ".state",
+            embedding_provider="hash",
+        )
+        service = MarvinService(settings)
+        try:
+            payload = service.health()
+            assert payload["embedding_backend"] == "hash (not loaded)"
+            assert payload["embedding_provider"] == "hash"
+            assert payload["rerank_enabled"] is False
+            assert payload["reranker_backend"] == "disabled"
+            assert payload["vault_path"].endswith("vault")
+            assert payload["index_path"].endswith("marvin.db")
+        finally:
+            service.close()
+
+    def test_reports_loaded_backend_after_use(self, tmp_path: Path) -> None:
+        settings = MarvinSettings(
+            vault_path=tmp_path / "vault",
+            state_dir=tmp_path / ".state",
+            embedding_provider="hash",
+        )
+        service = MarvinService(settings)
+        try:
+            service.embedder.embed_text("warm up")
+            payload = service.health()
+            assert payload["embedding_backend"] == "hash"
+        finally:
+            service.close()
+
+    def test_reports_reranker_loaded_state(self, tmp_path: Path) -> None:
+        settings = MarvinSettings(
+            vault_path=tmp_path / "vault",
+            state_dir=tmp_path / ".state",
+            embedding_provider="hash",
+            rerank_enabled=True,
+        )
+        service = MarvinService(settings)
+        try:
+            payload_before = service.health()
+            assert payload_before["reranker_backend"] == "auto (not loaded)"
+            service.reranker._backend_name = "fake"
+            payload_after = service.health()
+            assert payload_after["reranker_backend"] == "fake"
+        finally:
+            service.close()
+
+    def test_payload_keys_and_types(self, tmp_path: Path) -> None:
+        settings = MarvinSettings(
+            vault_path=tmp_path / "vault",
+            state_dir=tmp_path / ".state",
+            embedding_provider="hash",
+        )
+        service = MarvinService(settings)
+        try:
+            payload = service.health()
+            for key in (
+                "embedding_backend",
+                "embedding_provider",
+                "embedding_model",
+                "embedding_dimensions",
+                "rerank_enabled",
+                "rerank_provider",
+                "rerank_model",
+                "rerank_depth",
+                "reranker_backend",
+                "vault_path",
+                "index_path",
+            ):
+                assert key in payload, key
+            assert isinstance(payload["embedding_dimensions"], int)
+            assert isinstance(payload["rerank_enabled"], bool)
+            assert isinstance(payload["rerank_depth"], int)
+        finally:
+            service.close()
+
+
 def test_hybrid_search_include_chunk_text_flag(tmp_path: Path):
     settings = MarvinSettings(
         vault_path=tmp_path / "vault",
