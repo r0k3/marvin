@@ -8,7 +8,12 @@ from unittest.mock import patch
 import numpy as np
 import pytest
 
-from marvin.index import MemoryIndex, _sanitize_fts_query, chunk_markdown
+from marvin.index import (
+    MemoryIndex,
+    _normalize_entity,
+    _sanitize_fts_query,
+    chunk_markdown,
+)
 from marvin.models import MemoryKind, NoteMetadata, NoteRecord
 
 
@@ -139,3 +144,205 @@ class TestFirstStageOverfetch:
         assert index.first_stage_overfetch == 1
         assert index.first_stage_overfetch_min == 1
         index.close()
+
+
+class TestNormalizeEntity:
+    @pytest.mark.parametrize(
+        "raw, expected",
+        [
+            ("Apple Card", "apple card"),
+            ("apple card", "apple card"),
+            ("  APPLE CARD  ", "apple card"),
+            ("Straße", "strasse"),  # casefold > lower
+            ("", ""),
+            ("   ", ""),
+        ],
+    )
+    def test_canonicalisation(self, raw: str, expected: str) -> None:
+        assert _normalize_entity(raw) == expected
+
+
+def _make_note(
+    title: str,
+    body: str,
+    *,
+    kind: MemoryKind = MemoryKind.SEMANTIC,
+    links: list[str] | None = None,
+) -> NoteRecord:
+    meta = NoteMetadata(kind=kind, title=title, links=links or [])
+    return NoteRecord(
+        path=Path(f"{title}.md"), metadata=meta, body=body, raw_text=body
+    )
+
+
+def _empty_embeds(n: int, dim: int = 8) -> list[np.ndarray]:
+    return [np.zeros(dim, dtype=np.float32) for _ in range(n)]
+
+
+class TestKgSchemaAndHydration:
+    """Schema and edge hydration for the K-Lines retrieval stream."""
+
+    def _index(self) -> MemoryIndex:
+        return MemoryIndex(Path(":memory:"), dimensions=8)
+
+    def test_schema_creates_kg_tables(self) -> None:
+        index = self._index()
+        try:
+            tables = {
+                row[0]
+                for row in index.conn.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table'"
+                ).fetchall()
+            }
+            assert "entities" in tables
+            assert "entity_edges" in tables
+        finally:
+            index.close()
+
+    def test_upsert_populates_edges_from_links(self) -> None:
+        index = self._index()
+        try:
+            note = _make_note(
+                "Marsupials",
+                "Quokkas live in Western Australia.",
+                links=["Quokka", "Australia"],
+            )
+            chunks = chunk_markdown(note, 1200, 200)
+            index.upsert_note(
+                note,
+                "marsupials",
+                chunks=chunks,
+                embeddings=_empty_embeds(len(chunks)),
+            )
+
+            entities = {
+                row["normalized"]: row["name"]
+                for row in index.conn.execute(
+                    "SELECT name, normalized FROM entities"
+                ).fetchall()
+            }
+            assert entities == {"quokka": "Quokka", "australia": "Australia"}
+
+            edges = index.conn.execute(
+                """
+                SELECT e.normalized
+                FROM entity_edges ee
+                JOIN entities e ON e.id = ee.entity_id
+                JOIN notes n ON n.id = ee.note_id
+                WHERE n.relative_path = ?
+                """,
+                ("marsupials",),
+            ).fetchall()
+            assert {row["normalized"] for row in edges} == {
+                "quokka",
+                "australia",
+            }
+        finally:
+            index.close()
+
+    def test_reupsert_replaces_edges(self) -> None:
+        index = self._index()
+        try:
+            note = _make_note(
+                "Notes", "First", links=["Quokka", "Australia"]
+            )
+            chunks = chunk_markdown(note, 1200, 200)
+            index.upsert_note(
+                note, "notes", chunks=chunks, embeddings=_empty_embeds(len(chunks))
+            )
+
+            note2 = _make_note(
+                "Notes", "Updated", links=["Wombat"]
+            )
+            chunks2 = chunk_markdown(note2, 1200, 200)
+            index.upsert_note(
+                note2,
+                "notes",
+                chunks=chunks2,
+                embeddings=_empty_embeds(len(chunks2)),
+            )
+
+            edges = index.conn.execute(
+                """
+                SELECT e.normalized
+                FROM entity_edges ee
+                JOIN entities e ON e.id = ee.entity_id
+                JOIN notes n ON n.id = ee.note_id
+                WHERE n.relative_path = ?
+                """,
+                ("notes",),
+            ).fetchall()
+            assert {row["normalized"] for row in edges} == {"wombat"}
+
+            # Stale entities stay in the registry (cheap, may come back).
+            entity_count = index.conn.execute(
+                "SELECT COUNT(*) FROM entities"
+            ).fetchone()[0]
+            assert entity_count == 3
+        finally:
+            index.close()
+
+    def test_prune_removes_edges(self) -> None:
+        index = self._index()
+        try:
+            for path, links in [("a", ["X", "Y"]), ("b", ["Y", "Z"])]:
+                note = _make_note(path, path, links=links)
+                chunks = chunk_markdown(note, 1200, 200)
+                index.upsert_note(
+                    note, path, chunks=chunks, embeddings=_empty_embeds(len(chunks))
+                )
+
+            assert index.prune_deleted_notes(existing_paths={"a"}) == 1
+
+            remaining = index.conn.execute(
+                """
+                SELECT n.relative_path, e.normalized
+                FROM entity_edges ee
+                JOIN entities e ON e.id = ee.entity_id
+                JOIN notes n ON n.id = ee.note_id
+                ORDER BY n.relative_path, e.normalized
+                """
+            ).fetchall()
+            assert [(r["relative_path"], r["normalized"]) for r in remaining] == [
+                ("a", "x"),
+                ("a", "y"),
+            ]
+        finally:
+            index.close()
+
+    def test_no_links_no_edges(self) -> None:
+        index = self._index()
+        try:
+            note = _make_note("plain", "no wikilinks here", links=[])
+            chunks = chunk_markdown(note, 1200, 200)
+            index.upsert_note(
+                note, "plain", chunks=chunks, embeddings=_empty_embeds(len(chunks))
+            )
+            edge_count = index.conn.execute(
+                "SELECT COUNT(*) FROM entity_edges"
+            ).fetchone()[0]
+            assert edge_count == 0
+        finally:
+            index.close()
+
+    def test_case_insensitive_dedup_within_note(self) -> None:
+        index = self._index()
+        try:
+            note = _make_note(
+                "Notes", "x", links=["Apple Card", "apple card", "  APPLE CARD"]
+            )
+            chunks = chunk_markdown(note, 1200, 200)
+            index.upsert_note(
+                note, "notes", chunks=chunks, embeddings=_empty_embeds(len(chunks))
+            )
+            entities = index.conn.execute(
+                "SELECT name, normalized FROM entities"
+            ).fetchall()
+            assert len(entities) == 1
+            assert entities[0]["normalized"] == "apple card"
+            edges = index.conn.execute(
+                "SELECT COUNT(*) FROM entity_edges"
+            ).fetchone()[0]
+            assert edges == 1
+        finally:
+            index.close()

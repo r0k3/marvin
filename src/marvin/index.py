@@ -213,6 +213,47 @@ class MemoryIndex:
                     (chunk_id, packed),
                 )
 
+            self._replace_entity_edges(note_id, note.metadata.links)
+
+    def _replace_entity_edges(self, note_id: int, links: list[str]) -> None:
+        """Rebuild ``entity_edges`` for ``note_id`` from the note's wikilinks.
+
+        Called inside ``upsert_note``'s open transaction. The resolution
+        is case-fold based: ``[[Apple Card]]`` and ``[[apple card]]``
+        collapse to a single entity row; the display name for newly seen
+        entities is whatever the note used first.
+        """
+        self.conn.execute(
+            "DELETE FROM entity_edges WHERE note_id = ?", (note_id,)
+        )
+        seen: set[str] = set()
+        for link in links or []:
+            normalized = _normalize_entity(link)
+            if not normalized or normalized in seen:
+                continue
+            seen.add(normalized)
+            display = link.strip()
+            self.conn.execute(
+                """
+                INSERT INTO entities (name, normalized) VALUES (?, ?)
+                ON CONFLICT(normalized) DO NOTHING
+                """,
+                (display, normalized),
+            )
+            row = self.conn.execute(
+                "SELECT id FROM entities WHERE normalized = ?", (normalized,)
+            ).fetchone()
+            if row is None:
+                continue
+            self.conn.execute(
+                """
+                INSERT INTO entity_edges (note_id, entity_id, weight)
+                VALUES (?, ?, 1.0)
+                ON CONFLICT(note_id, entity_id) DO NOTHING
+                """,
+                (note_id, row["id"]),
+            )
+
     def prune_deleted_notes(self, existing_paths: set[str]) -> int:
         rows = self.conn.execute("SELECT id, relative_path FROM notes").fetchall()
         removed = 0
@@ -231,6 +272,9 @@ class MemoryIndex:
                         chunk_ids,
                     )
                 self.conn.execute("DELETE FROM chunks WHERE note_id = ?", (row["id"],))
+                self.conn.execute(
+                    "DELETE FROM entity_edges WHERE note_id = ?", (row["id"],)
+                )
                 self.conn.execute("DELETE FROM notes WHERE id = ?", (row["id"],))
                 removed += 1
         return removed
@@ -404,6 +448,50 @@ class MemoryIndex:
                 )
                 """
             )
+            # Entity graph backing the K-Lines retrieval stream. ``entities``
+            # is the canonical entity registry (one row per ``[[wikilink]]``
+            # ever seen, deduped by case-folded form). ``entity_edges`` is
+            # the many-to-many relation between notes and entities; rows are
+            # rebuilt on every ``upsert_note`` and explicitly cleared on
+            # ``prune_deleted_notes`` (sqlite-vec does not run with
+            # ``PRAGMA foreign_keys=ON`` so we cannot rely on cascade).
+            self.conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS entities (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT NOT NULL,
+                    normalized TEXT UNIQUE NOT NULL
+                )
+                """
+            )
+            self.conn.execute(
+                """
+                CREATE INDEX IF NOT EXISTS entities_normalized_idx
+                ON entities(normalized)
+                """
+            )
+            self.conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS entity_edges (
+                    note_id INTEGER NOT NULL,
+                    entity_id INTEGER NOT NULL,
+                    weight REAL NOT NULL DEFAULT 1.0,
+                    PRIMARY KEY (note_id, entity_id)
+                )
+                """
+            )
+            self.conn.execute(
+                """
+                CREATE INDEX IF NOT EXISTS entity_edges_entity_id_idx
+                ON entity_edges(entity_id)
+                """
+            )
+            self.conn.execute(
+                """
+                CREATE INDEX IF NOT EXISTS entity_edges_note_id_idx
+                ON entity_edges(note_id)
+                """
+            )
             self.conn.execute(
                 """
                 CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(
@@ -461,6 +549,16 @@ class MemoryIndex:
 def _excerpt(text: str, limit: int = 320) -> str:
     normalized = " ".join(text.split())
     return normalized[:limit] + ("..." if len(normalized) > limit else "")
+
+
+def _normalize_entity(name: str) -> str:
+    """Canonical key for entity dedup and query-side resolution.
+
+    Mirrors ``str.casefold()`` semantics used elsewhere in the vault for
+    link comparison (more aggressive than ``lower()`` for international
+    text such as German eszett / Turkish dotted I).
+    """
+    return name.strip().casefold()
 
 
 # FTS5 reserves these characters for query syntax (phrase, prefix, boolean,
