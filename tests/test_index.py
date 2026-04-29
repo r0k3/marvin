@@ -1072,6 +1072,94 @@ class TestMemoryDecay:
         finally:
             index.close()
 
+    def test_decay_kinds_filter_excludes_semantic(self) -> None:
+        """Semantic facts are timeless; the default decay_kinds is
+        ``{EPISODIC}`` so a fresh semantic note should NOT outrank an
+        old semantic note on the basis of recency alone."""
+        index = MemoryIndex(
+            Path(":memory:"),
+            dimensions=8,
+            decay_enabled=True,
+            decay_half_life_days=30.0,
+            decay_weight=0.5,
+        )
+        try:
+            now = datetime(2025, 1, 10, 12, 0, tzinfo=UTC)
+            old = now - timedelta(days=365)
+            for path, ts in (("old", old), ("new", now)):
+                meta = NoteMetadata(
+                    kind=MemoryKind.SEMANTIC,
+                    title=path,
+                    created_at=ts,
+                    updated_at=ts,
+                )
+                note = NoteRecord(
+                    path=Path(f"{path}.md"),
+                    metadata=meta,
+                    body="the quokka is a marsupial",
+                    raw_text="",
+                )
+                chunks = chunk_markdown(note, 1200, 200)
+                index.upsert_note(
+                    note,
+                    path,
+                    chunks=chunks,
+                    embeddings=_empty_embeds(len(chunks)),
+                )
+            hits = index.hybrid_search(
+                query="quokka marsupial",
+                query_embedding=np.zeros(8, dtype=np.float32),
+                limit=5,
+                query_time=now,
+            )
+            assert {h.path for h in hits} == {"old", "new"}
+        finally:
+            index.close()
+
+    def test_decay_kinds_explicit_includes_semantic(self) -> None:
+        """When the caller explicitly passes ``frozenset({SEMANTIC})``
+        the kind filter inverts and semantic notes do get the boost."""
+        index = MemoryIndex(
+            Path(":memory:"),
+            dimensions=8,
+            decay_enabled=True,
+            decay_half_life_days=30.0,
+            decay_weight=0.5,
+            decay_kinds=frozenset({MemoryKind.SEMANTIC}),
+        )
+        try:
+            now = datetime(2025, 1, 10, 12, 0, tzinfo=UTC)
+            old = now - timedelta(days=365)
+            for path, ts in (("old", old), ("new", now)):
+                meta = NoteMetadata(
+                    kind=MemoryKind.SEMANTIC,
+                    title=path,
+                    created_at=ts,
+                    updated_at=ts,
+                )
+                note = NoteRecord(
+                    path=Path(f"{path}.md"),
+                    metadata=meta,
+                    body="the quokka is a marsupial",
+                    raw_text="",
+                )
+                chunks = chunk_markdown(note, 1200, 200)
+                index.upsert_note(
+                    note,
+                    path,
+                    chunks=chunks,
+                    embeddings=_empty_embeds(len(chunks)),
+                )
+            hits = index.hybrid_search(
+                query="quokka marsupial",
+                query_embedding=np.zeros(8, dtype=np.float32),
+                limit=5,
+                query_time=now,
+            )
+            assert hits[0].path == "new"
+        finally:
+            index.close()
+
     def test_query_time_default_is_now(self) -> None:
         """Omitting ``query_time`` falls back to the index server's
         ``utc_now``, so a recent note still gets a boost over an old one

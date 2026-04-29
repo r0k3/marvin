@@ -149,6 +149,14 @@ their honest RRF rank. See `marvin.decay` for the formula.
 | `decay_enabled` | `false` | toggle the freshness boost |
 | `decay_half_life_days` | `30.0` | exponential half-life (days) |
 | `decay_weight` | `0.5` | maximum boost (1.0 = double the score for an instant-old note) |
+| `decay_kinds_csv` | `"episodic"` | comma-separated kinds the boost applies to (`"episodic,procedural"`, `"all"`, `""`) |
+
+The kind filter exists because semantic facts ("Berlin is the capital
+of Germany") and procedural how-tos ("how to deploy the staging
+service") are largely timeless: a 12-month-old fact is just as true as
+a fresh one, so demoting it on age is wrong by construction. Episodic
+chat sessions, by contrast, have a strong recency prior. The default
+``decay_kinds_csv = "episodic"`` mirrors that intuition.
 
 LongMemEval-S impact (n=30, `--question-type knowledge-update`,
 hybrid no-rerank):

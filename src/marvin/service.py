@@ -19,6 +19,29 @@ from .models import (
     SessionContext,
     SyncReport,
 )
+
+
+def _parse_decay_kinds(csv: str) -> frozenset[MemoryKind] | None:
+    """Decode the ``decay_kinds_csv`` setting.
+
+    Empty string => ``frozenset()`` (decay applies to no kind).
+    The literal token ``all`` => ``None`` so the index falls back to
+    its default (currently ``EPISODIC`` only) without enumerating
+    each kind here.
+    """
+    text = csv.strip().lower()
+    if not text:
+        return frozenset()
+    if text == "all":
+        return frozenset(MemoryKind)
+    parts = [p.strip() for p in text.split(",") if p.strip()]
+    out: set[MemoryKind] = set()
+    for token in parts:
+        try:
+            out.add(MemoryKind(token))
+        except ValueError:
+            continue
+    return frozenset(out) if out else frozenset()
 from .reranker import RerankerService
 from .vault import VaultStore, normalize_links, normalize_tags
 
@@ -63,6 +86,7 @@ class MarvinService:
             decay_enabled=self.settings.decay_enabled,
             decay_half_life_days=self.settings.decay_half_life_days,
             decay_weight=self.settings.decay_weight,
+            decay_kinds=_parse_decay_kinds(self.settings.decay_kinds_csv),
         )
 
     def close(self) -> None:
