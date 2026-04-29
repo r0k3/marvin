@@ -300,7 +300,29 @@ per `search()` call and only when `rerank_enabled` is set.
 
 ### Output
 
-The CLI prints a per-question-type breakdown and writes a JSON dump:
+The CLI prints a per-question-type breakdown and writes a JSON dump.
+
+**Single-shot:** pass ``--output PATH`` to write to a specific file.
+
+**Versioned (recommended for tracking regressions):** pass
+``--results-dir DIR`` instead. The summary lands at
+``DIR/<git-short-sha>/<auto-name>.json`` where the auto-name encodes the
+configuration knobs that change retrieval behaviour (mode, embedder,
+reranker, limit, K-Lines flags). A dirty working tree gets a ``-dirty``
+suffix on the SHA so uncommitted changes are obvious in the directory
+listing.
+
+```bash
+# Same SHA, three runs, no clobbering:
+python -m marvin.eval --dataset PATH --mode bm25       --results-dir experiments/results
+# -> experiments/results/263e199/bm25.json
+python -m marvin.eval --dataset PATH --mode hybrid     --results-dir experiments/results
+# -> experiments/results/263e199/hybrid.json
+python -m marvin.eval --dataset PATH --mode hybrid --rerank --results-dir experiments/results
+# -> experiments/results/263e199/hybrid-rerank.json
+```
+
+The schema:
 
 ```json
 {

@@ -21,6 +21,7 @@ from pathlib import Path
 from marvin.embeddings import EmbeddingService
 from marvin.reranker import DEFAULT_RERANK_MODEL, RerankerService
 
+from ._results import resolve_results_path
 from .longmemeval import (
     Mode,
     BenchSummary,
@@ -165,7 +166,15 @@ def _build_parser() -> argparse.ArgumentParser:
         "--output",
         type=Path,
         default=None,
-        help="Write the summary JSON to this path",
+        help="Write the summary JSON to this path (mutually exclusive with --results-dir)",
+    )
+    parser.add_argument(
+        "--results-dir",
+        type=Path,
+        default=None,
+        help="Write to <results-dir>/<git-short-sha>/<auto-name>.json. The "
+        "auto-name encodes mode + key flags (embedder, rerank, limit) so "
+        "regression diffs across commits don't clobber each other.",
     )
     parser.add_argument(
         "--progress",
@@ -242,9 +251,21 @@ def main(argv: list[str] | None = None) -> int:
     print()
     print(format_summary(summary))
 
-    if args.output is not None:
-        _write_summary(summary, args.output)
-        print(f"\nSaved JSON to {args.output}")
+    if args.output is not None and args.results_dir is not None:
+        print(
+            "warning: --output is ignored when --results-dir is set",
+            file=sys.stderr,
+        )
+
+    output_path: Path | None = None
+    if args.results_dir is not None:
+        output_path = resolve_results_path(args.results_dir, args)
+    elif args.output is not None:
+        output_path = args.output
+
+    if output_path is not None:
+        _write_summary(summary, output_path)
+        print(f"\nSaved JSON to {output_path}")
 
     return 0
 
