@@ -299,6 +299,8 @@ class TestServiceHealth:
                 "rerank_model",
                 "rerank_depth",
                 "reranker_backend",
+                "gpu_active",
+                "gpu_lib_count",
                 "kg_enabled",
                 "kg_rrf_k",
                 "vault_path",
@@ -308,8 +310,36 @@ class TestServiceHealth:
             assert isinstance(payload["embedding_dimensions"], int)
             assert isinstance(payload["rerank_enabled"], bool)
             assert isinstance(payload["rerank_depth"], int)
+            assert isinstance(payload["gpu_active"], bool)
+            assert isinstance(payload["gpu_lib_count"], int)
             assert isinstance(payload["kg_enabled"], bool)
             assert isinstance(payload["kg_rrf_k"], float)
+        finally:
+            service.close()
+
+    def test_reports_gpu_inactive_without_bootstrap(self, tmp_path: Path) -> None:
+        """Hash backend never preloads CUDA; ``gpu_active`` must be False.
+
+        The bootstrap module caches state in process-wide globals so we
+        defensively clear them. The True case (CUDA actually loaded) is
+        covered by the manual smoke test in the worktree (eval CLI with
+        ``--extra gpu``).
+        """
+        import marvin.gpu as gpu
+
+        gpu._BOOTSTRAPPED = False
+        gpu._LOADED_LIBS = []
+
+        settings = MarvinSettings(
+            vault_path=tmp_path / "vault",
+            state_dir=tmp_path / ".state",
+            embedding_provider="hash",
+        )
+        service = MarvinService(settings)
+        try:
+            payload = service.health()
+            assert payload["gpu_active"] is False
+            assert payload["gpu_lib_count"] == 0
         finally:
             service.close()
 

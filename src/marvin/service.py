@@ -89,6 +89,10 @@ class MarvinService:
                 else f"{self.settings.rerank_provider} (not loaded)"
             )
 
+        from . import gpu as _gpu
+
+        gpu_libs = _gpu.loaded_libs()
+
         return {
             "embedding_backend": embedding_backend,
             "embedding_provider": self.settings.embedding_provider,
@@ -99,6 +103,8 @@ class MarvinService:
             "rerank_model": self.settings.rerank_model,
             "rerank_depth": self.settings.rerank_depth,
             "reranker_backend": reranker_backend,
+            "gpu_active": bool(gpu_libs),
+            "gpu_lib_count": len(gpu_libs),
             "kg_enabled": self.settings.kg_enabled,
             "kg_rrf_k": self.settings.kg_rrf_k,
             "kg_fusion_weight": self.settings.kg_fusion_weight,

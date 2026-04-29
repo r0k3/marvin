@@ -210,29 +210,26 @@ alongside the matching NVIDIA wheels. On the same RTX 4090 host, the
 32-core Threadripper CPU only, it takes 16+ hours because the ~512-char
 chunks hit the bge-small attention quadratically.
 
-To enable GPU inference (CUDA 12.x, cuDNN 9.x):
+To enable GPU inference on Linux + NVIDIA (CUDA 12.x, cuDNN 9.x), install
+the `gpu` extra:
 
 ```bash
-uv pip install onnxruntime-gpu \
-  nvidia-cublas-cu12 nvidia-cuda-runtime-cu12 nvidia-cudnn-cu12 \
-  nvidia-curand-cu12 nvidia-cufft-cu12 nvidia-cuda-nvrtc-cu12 \
-  nvidia-nvjitlink-cu12
+uv pip install 'marvin[gpu]'
 
-# Make the wheel libs visible to the dynamic linker.
-export LD_LIBRARY_PATH="$(python -c '
-import sys, os
-for p in sys.path:
-    nv = os.path.join(p, \"nvidia\")
-    if os.path.isdir(nv):
-        for sub in os.listdir(nv):
-            lib = os.path.join(nv, sub, \"lib\")
-            if os.path.isdir(lib):
-                print(lib)
-' | paste -sd:):$LD_LIBRARY_PATH"
-
-# Reranker: use the FP16 ONNX file instead of the int8-quantised default.
+# Optional: reranker uses the FP16 ONNX file (5x faster on GPU than the
+# int8 CPU default).
 export MARVIN_RERANK_MODEL_FILE=onnx/model_fp16.onnx
 ```
+
+The `gpu` extra pulls in `onnxruntime-gpu` and the matching
+`nvidia-*-cu12` wheels (~2.5 GB on disk). At first use,
+:func:`marvin.gpu.bootstrap` ``ctypes``-preloads the bundled CUDA / cuDNN
+libraries into the running process so onnxruntime's CUDA execution
+provider can find them without `LD_LIBRARY_PATH` plumbing. The preload
+is idempotent and can be disabled with `MARVIN_DISABLE_GPU_BOOTSTRAP=1`
+if the host CUDA toolkit is older than the wheel-bundled libs.
+`MarvinService.health()` reports `gpu_active` and `gpu_lib_count` so
+you can verify a deployment is using the GPU.
 
 For CPU-only iteration:
 

@@ -32,6 +32,25 @@ dependencies = [
     "watchdog>=6.0.0",
 ]
 
+[project.optional-dependencies]
+# Linux + NVIDIA GPU (CUDA 12.x, cuDNN 9.x). On install, the
+# ``onnxruntime-gpu`` wheel and the matching NVIDIA pip wheels are
+# pulled in; ``marvin.gpu.bootstrap`` then preloads the .so files via
+# ctypes so onnxruntime finds them without needing LD_LIBRARY_PATH.
+# Drops about ~2.5 GB on disk; CPU-only deployments should NOT install
+# this extra. macOS / Windows users should install ``onnxruntime-coreml``
+# / ``onnxruntime-directml`` separately as needed.
+gpu = [
+    "onnxruntime-gpu>=1.25",
+    "nvidia-cublas-cu12",
+    "nvidia-cuda-runtime-cu12",
+    "nvidia-cudnn-cu12",
+    "nvidia-curand-cu12",
+    "nvidia-cufft-cu12",
+    "nvidia-cuda-nvrtc-cu12",
+    "nvidia-nvjitlink-cu12",
+]
+
 [project.urls]
 Homepage = "https://github.com/r0k3/marvin"
 Repository = "https://github.com/r0k3/marvin"
