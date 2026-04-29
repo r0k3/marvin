@@ -60,6 +60,9 @@ class MarvinService:
             kg_extract_at_ingest=self.settings.kg_extract_at_ingest,
             kg_ingest_min_length=self.settings.kg_ingest_min_length,
             kg_ingest_multiword_only=self.settings.kg_ingest_multiword_only,
+            decay_enabled=self.settings.decay_enabled,
+            decay_half_life_days=self.settings.decay_half_life_days,
+            decay_weight=self.settings.decay_weight,
         )
 
     def close(self) -> None:
@@ -111,6 +114,9 @@ class MarvinService:
             "kg_extract_at_ingest": self.settings.kg_extract_at_ingest,
             "kg_ingest_min_length": self.settings.kg_ingest_min_length,
             "kg_ingest_multiword_only": self.settings.kg_ingest_multiword_only,
+            "decay_enabled": self.settings.decay_enabled,
+            "decay_half_life_days": self.settings.decay_half_life_days,
+            "decay_weight": self.settings.decay_weight,
             "vault_path": str(self.settings.resolved_vault_path),
             "index_path": str(self.settings.index_path),
         }

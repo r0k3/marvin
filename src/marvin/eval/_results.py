@@ -105,6 +105,8 @@ def build_auto_name(args: argparse.Namespace) -> str:
         parts.append("no-kg")
     if getattr(args, "at_ingest", False):
         parts.append("at-ingest")
+    if getattr(args, "decay", False):
+        parts.append("decay")
 
     return "-".join(parts)
 

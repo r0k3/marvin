@@ -21,11 +21,13 @@ from __future__ import annotations
 
 import json
 import math
+import re
 import sqlite3
 import time
 from collections import defaultdict
 from collections.abc import Iterable, Sequence
 from contextlib import contextmanager
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
 
@@ -190,15 +192,17 @@ def _session_to_note(
     turns: Sequence[dict[str, object]],
     *,
     vault_root: Path,
+    timestamp: datetime | None = None,
 ) -> NoteRecord:
     body = _format_turns(turns)
     title = f"Session {session_id}"
     raw_text = f"# {title}\n\n{body}"
+    ts = timestamp or utc_now()
     metadata = NoteMetadata(
         kind=MemoryKind.EPISODIC,
         title=title,
-        created_at=utc_now(),
-        updated_at=utc_now(),
+        created_at=ts,
+        updated_at=ts,
     )
     return NoteRecord(
         path=vault_root / f"{session_id}.md",
@@ -206,6 +210,37 @@ def _session_to_note(
         body=body,
         raw_text=raw_text,
     )
+
+
+# LongMemEval timestamps look like ``2023/05/30 (Tue) 23:40``. The
+# weekday in parens is redundant given the date so we strip it before
+# parsing. Returns ``None`` when the format does not match -- the
+# benchmark harness then falls back to ``utc_now()`` so a malformed
+# entry still runs (just without temporal signal).
+_LME_TS_PATTERN = re.compile(
+    r"^(?P<date>\d{4}/\d{2}/\d{2})\s*\([^)]+\)\s*(?P<time>\d{2}:\d{2})$"
+)
+
+
+def parse_longmemeval_timestamp(value: str | None) -> datetime | None:
+    """Parse a LongMemEval ``YYYY/MM/DD (DOW) HH:MM`` string into UTC.
+
+    LongMemEval does not record a timezone; we anchor to UTC. The
+    weekday in parens is redundant given the date so we strip it. The
+    function returns ``None`` for missing/malformed strings so callers
+    can fall back to a default rather than raising.
+    """
+    if not value:
+        return None
+    match = _LME_TS_PATTERN.match(value.strip())
+    if match is None:
+        return None
+    raw = f"{match['date']} {match['time']}"
+    try:
+        naive = datetime.strptime(raw, "%Y/%m/%d %H:%M")
+    except ValueError:
+        return None
+    return naive.replace(tzinfo=UTC)
 
 
 # ---------------------------------------------------------------------------
@@ -343,18 +378,34 @@ def _run_question(
     needs_vectors = mode in {"vector", "hybrid"}
     started = time.perf_counter()
 
+    # Pair each session with its dataset timestamp (zip is short-tolerant
+    # rather than ``strict`` because not every release of the dataset
+    # carries dates for every haystack entry; missing entries fall back
+    # to ``utc_now()`` per ``_session_to_note``).
+    haystack_dates = list(entry.haystack_dates)
+    while len(haystack_dates) < len(entry.haystack_session_ids):
+        haystack_dates.append("")
+
+    query_time = parse_longmemeval_timestamp(entry.question_date)
+
     with _ephemeral_index(embedder.dimensions, **(index_options or {})) as index:
         # Build chunks for every session up front, then embed in one big
         # batch. fastembed has substantial per-call overhead and
         # superlinear scaling on long inputs, so this is materially faster
         # than embedding session-by-session.
         per_session_chunks: list[tuple[str, NoteRecord, list]] = []
-        for session_id, turns in zip(
+        for session_id, turns, raw_ts in zip(
             entry.haystack_session_ids,
             entry.haystack_sessions,
+            haystack_dates,
             strict=True,
         ):
-            note = _session_to_note(session_id, turns, vault_root=vault_root)
+            note = _session_to_note(
+                session_id,
+                turns,
+                vault_root=vault_root,
+                timestamp=parse_longmemeval_timestamp(raw_ts),
+            )
             chunks = chunk_markdown(note, chunk_size, chunk_overlap)
             per_session_chunks.append((session_id, note, chunks))
 
@@ -397,6 +448,14 @@ def _run_question(
             # long conversations). We fetch more chunks than rerank_depth
             # sessions because several chunks may belong to the same
             # session; max-pooling after scoring collapses them back.
+            #
+            # Note: ``query_time`` is not threaded into the chunk-level
+            # rerank path because reranking only re-orders the
+            # first-stage chunk pool by query/document interaction;
+            # decay is a note-level signal that would only kick in
+            # again post-rerank, where it could fight the cross-encoder's
+            # ranking. The benchmark therefore exercises decay only on
+            # the no-rerank ``hybrid_search`` branch.
             chunk_rows = _chunk_rows_for_mode(
                 index=index,
                 mode=mode,
@@ -416,6 +475,7 @@ def _run_question(
                     query=entry.question,
                     query_embedding=query_embedding,
                     limit=top_k,
+                    query_time=query_time,
                 )
                 retrieved = [hit.path for hit in hits]
             elif mode == "bm25":

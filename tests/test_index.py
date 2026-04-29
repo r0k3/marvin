@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
@@ -959,5 +960,140 @@ class TestKgUpsertAtIngest:
                 limit=5,
             )
             assert hits[0].path == "a"
+        finally:
+            index.close()
+
+
+class TestMemoryDecay:
+    """``hybrid_search`` time-aware boost.
+
+    The boost is multiplicative on the final RRF score, so it should
+    only flip ranking among notes whose RRF scores are close. Tests
+    construct tied or near-tied candidates and assert that the fresher
+    one wins when decay is enabled, and the original tie-break behaviour
+    holds when decay is off.
+    """
+
+    def _seed_two_notes(
+        self,
+        index: MemoryIndex,
+        *,
+        old_time: datetime,
+        new_time: datetime,
+        body: str,
+    ) -> None:
+        for path, ts in (("old", old_time), ("new", new_time)):
+            meta = NoteMetadata(
+                kind=MemoryKind.EPISODIC,
+                title=path,
+                created_at=ts,
+                updated_at=ts,
+            )
+            note = NoteRecord(
+                path=Path(f"{path}.md"), metadata=meta, body=body, raw_text=body
+            )
+            chunks = chunk_markdown(note, 1200, 200)
+            index.upsert_note(
+                note, path, chunks=chunks, embeddings=_empty_embeds(len(chunks))
+            )
+
+    def test_disabled_by_default_keeps_tie_break_stable(self) -> None:
+        """Without decay, two notes with identical content rank by their
+        deterministic relative-path order in dict iteration. Pin that
+        baseline so the decay-on test isn't fooled by chance."""
+        index = MemoryIndex(Path(":memory:"), dimensions=8, decay_enabled=False)
+        try:
+            now = datetime(2025, 1, 10, 12, 0, tzinfo=UTC)
+            old = now - timedelta(days=365)
+            self._seed_two_notes(
+                index, old_time=old, new_time=now, body="the quokka is a marsupial"
+            )
+            hits = index.hybrid_search(
+                query="quokka marsupial",
+                query_embedding=np.zeros(8, dtype=np.float32),
+                limit=5,
+                query_time=now,
+            )
+            paths = [h.path for h in hits]
+            assert set(paths) == {"old", "new"}
+
+        finally:
+            index.close()
+
+    def test_enabled_promotes_fresher_note(self) -> None:
+        index = MemoryIndex(
+            Path(":memory:"),
+            dimensions=8,
+            decay_enabled=True,
+            decay_half_life_days=30.0,
+            decay_weight=0.5,
+        )
+        try:
+            now = datetime(2025, 1, 10, 12, 0, tzinfo=UTC)
+            old = now - timedelta(days=365)
+            self._seed_two_notes(
+                index, old_time=old, new_time=now, body="the quokka is a marsupial"
+            )
+            hits = index.hybrid_search(
+                query="quokka marsupial",
+                query_embedding=np.zeros(8, dtype=np.float32),
+                limit=5,
+                query_time=now,
+            )
+            assert hits[0].path == "new", (
+                f"expected fresher note to win, got {[h.path for h in hits]}"
+            )
+        finally:
+            index.close()
+
+    def test_enabled_with_zero_weight_is_noop(self) -> None:
+        """Belt-and-braces: ``decay_enabled=True, decay_weight=0`` must
+        match the disabled path so callers can flag-flip without a
+        behavioural change."""
+        index = MemoryIndex(
+            Path(":memory:"),
+            dimensions=8,
+            decay_enabled=True,
+            decay_weight=0.0,
+        )
+        try:
+            now = datetime(2025, 1, 10, 12, 0, tzinfo=UTC)
+            old = now - timedelta(days=365)
+            self._seed_two_notes(
+                index, old_time=old, new_time=now, body="the quokka is a marsupial"
+            )
+            hits = index.hybrid_search(
+                query="quokka marsupial",
+                query_embedding=np.zeros(8, dtype=np.float32),
+                limit=5,
+                query_time=now,
+            )
+            assert {h.path for h in hits} == {"old", "new"}
+        finally:
+            index.close()
+
+    def test_query_time_default_is_now(self) -> None:
+        """Omitting ``query_time`` falls back to the index server's
+        ``utc_now``, so a recent note still gets a boost over an old one
+        without the caller needing to thread a timestamp through."""
+        index = MemoryIndex(
+            Path(":memory:"),
+            dimensions=8,
+            decay_enabled=True,
+            decay_half_life_days=30.0,
+            decay_weight=0.5,
+        )
+        try:
+            now = datetime.now(UTC)
+            old = now - timedelta(days=365)
+            self._seed_two_notes(
+                index, old_time=old, new_time=now, body="the quokka is a marsupial"
+            )
+            hits = index.hybrid_search(
+                query="quokka marsupial",
+                query_embedding=np.zeros(8, dtype=np.float32),
+                limit=5,
+            )
+            assert hits[0].path == "new"
         finally:
             index.close()

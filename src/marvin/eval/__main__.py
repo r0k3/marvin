@@ -55,6 +55,15 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Run only the first N (post-filter) questions; 0 = all",
     )
     parser.add_argument(
+        "--question-type",
+        action="append",
+        default=None,
+        help="Restrict to entries whose ``question_type`` matches. May be "
+        "passed multiple times to keep several types. Useful for "
+        "ablations on a specific slice (knowledge-update, "
+        "temporal-reasoning, ...).",
+    )
+    parser.add_argument(
         "--top-k",
         type=int,
         default=20,
@@ -163,6 +172,26 @@ def _build_parser() -> argparse.ArgumentParser:
         "stream (default 0.5; 1.0 = symmetric fusion)",
     )
     parser.add_argument(
+        "--decay",
+        action="store_true",
+        help="Apply a freshness boost to the final note ranking (uses "
+        "haystack/question dates from the dataset). Off by default.",
+    )
+    parser.add_argument(
+        "--decay-half-life-days",
+        type=float,
+        default=30.0,
+        help="Half-life of the freshness boost in days (default: 30). "
+        "Smaller values favour very recent notes more aggressively.",
+    )
+    parser.add_argument(
+        "--decay-weight",
+        type=float,
+        default=0.5,
+        help="Maximum freshness multiplier (default: 0.5; an instant-old "
+        "note's score is multiplied by 1.5, an infinitely-old note by 1.0)",
+    )
+    parser.add_argument(
         "--output",
         type=Path,
         default=None,
@@ -198,6 +227,9 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     entries = load_dataset(args.dataset, include_abstention=args.include_abstention)
+    if args.question_type:
+        wanted = set(args.question_type)
+        entries = [e for e in entries if e.question_type in wanted]
     if args.limit > 0:
         entries = entries[: args.limit]
     if not entries:
@@ -221,6 +253,8 @@ def main(argv: list[str] | None = None) -> int:
         _ = reranker.backend_name
 
     mode_banner = args.mode + (" + rerank" if reranker else "")
+    if args.decay:
+        mode_banner += " + decay"
     print(
         f"Running LongMemEval-S in {mode_banner} mode on {len(entries)} questions...",
         flush=True,
@@ -232,6 +266,9 @@ def main(argv: list[str] | None = None) -> int:
         "kg_ingest_min_length": args.kg_ingest_min_length,
         "kg_ingest_multiword_only": not args.kg_allow_single_word,
         "kg_fusion_weight": args.kg_fusion_weight,
+        "decay_enabled": args.decay,
+        "decay_half_life_days": args.decay_half_life_days,
+        "decay_weight": args.decay_weight,
     }
 
     summary = run_benchmark(
