@@ -98,6 +98,12 @@ class FastEmbedRerankerBackend:
         batch_size: int = 32,
         max_chars: int = 1024,
     ) -> None:
+        # Preload CUDA/cuDNN before the first ``import fastembed`` so the
+        # cross-encoder can mount on the GPU. No-op without marvin[gpu].
+        from . import gpu
+
+        gpu.bootstrap()
+
         from fastembed.common.model_description import ModelSource
         from fastembed.rerank.cross_encoder import TextCrossEncoder
 

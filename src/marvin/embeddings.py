@@ -47,6 +47,13 @@ class HashEmbeddingBackend:
 
 class FastEmbedBackend:
     def __init__(self, model_name: str, dimensions: int = 384) -> None:
+        # Preload CUDA/cuDNN libs (no-op without the marvin[gpu] extra)
+        # *before* the first ``import fastembed`` so onnxruntime's CUDA
+        # execution provider can dlopen its dependencies. See marvin.gpu.
+        from . import gpu
+
+        gpu.bootstrap()
+
         from fastembed import TextEmbedding
 
         self.dimensions = dimensions
