@@ -122,6 +122,7 @@ class MemoryIndex:
         decay_enabled: bool = False,
         decay_half_life_days: float = 30.0,
         decay_weight: float = 0.5,
+        decay_kinds: frozenset[MemoryKind] | None = None,
     ) -> None:
         self.db_path = db_path
         self.dimensions = dimensions
@@ -152,11 +153,21 @@ class MemoryIndex:
         # Time-aware boost over the final note ranking. Off by default
         # (opt-in via settings) so existing behaviour is unchanged.
         # ``decay_weight`` caps the multiplicative boost; setting it to
-        # 0 disables decay even when ``decay_enabled`` is True. See
-        # :mod:`marvin.decay` for the rationale.
+        # 0 disables decay even when ``decay_enabled`` is True.
+        # ``decay_kinds`` restricts the boost to specific note kinds --
+        # default is EPISODIC only because semantic, procedural, and
+        # reflective notes encode (mostly) timeless content where
+        # "fresher = better" doesn't hold. Pass ``frozenset(MemoryKind)``
+        # to apply decay to every kind. See :mod:`marvin.decay` for the
+        # rationale.
         self.decay_enabled = decay_enabled
         self.decay_half_life_days = max(1e-3, decay_half_life_days)
         self.decay_weight = max(0.0, decay_weight)
+        self.decay_kinds: frozenset[MemoryKind] = (
+            decay_kinds
+            if decay_kinds is not None
+            else frozenset({MemoryKind.EPISODIC})
+        )
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self.conn = sqlite3.connect(self.db_path)
         self.conn.row_factory = sqlite3.Row
@@ -531,9 +542,10 @@ class MemoryIndex:
     ) -> None:
         """Mutate ``scores`` in place with a freshness multiplier.
 
-        Pulls ``updated_at`` for the candidate paths in a single query
-        rather than threading the timestamp through every row in every
-        first-stage stream. Notes whose ``updated_at`` cannot be parsed
+        Pulls ``updated_at`` and ``kind`` for the candidate paths in a
+        single query rather than threading the timestamp through every
+        row in every first-stage stream. Notes whose ``updated_at``
+        cannot be parsed, or whose kind isn't in :attr:`decay_kinds`,
         are left untouched (multiplier = 1.0), matching the no-op
         contract of :func:`marvin.decay.freshness_boost`.
         """
@@ -542,11 +554,18 @@ class MemoryIndex:
         paths = list(scores.keys())
         placeholders = ",".join("?" for _ in paths)
         rows = self.conn.execute(
-            f"SELECT relative_path, updated_at FROM notes "
+            f"SELECT relative_path, kind, updated_at FROM notes "
             f"WHERE relative_path IN ({placeholders})",
             paths,
         ).fetchall()
+        kinds = self.decay_kinds
         for row in rows:
+            try:
+                kind = MemoryKind(row["kind"])
+            except ValueError:
+                continue
+            if kind not in kinds:
+                continue
             note_time = parse_note_timestamp(row["updated_at"])
             if note_time is None:
                 continue

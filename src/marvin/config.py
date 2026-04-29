@@ -73,6 +73,14 @@ class MarvinSettings(BaseSettings):
     decay_enabled: bool = Field(default=False)
     decay_half_life_days: float = Field(default=30.0, gt=0.0)
     decay_weight: float = Field(default=0.5, ge=0.0)
+    # Comma-separated list of note kinds the freshness boost applies
+    # to. Default is ``"episodic"`` because semantic facts and
+    # procedural how-tos are (mostly) timeless and shouldn't be
+    # demoted purely for being old. Set to ``"episodic,procedural"``
+    # for vaults that treat procedures as time-sensitive (deployment
+    # runbooks, dependency notes), or ``""`` to apply decay to no
+    # kind (effectively disabling it without flipping the toggle).
+    decay_kinds_csv: str = Field(default="episodic")
 
     # At-ingest entity extraction. Augments ``metadata.links`` (which
     # only carries explicit ``[[wikilinks]]`` produced by the
