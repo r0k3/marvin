@@ -137,69 +137,109 @@ and rare entities a lot, mirroring BM25's term weighting.
 
 ### Baseline numbers
 
-Run on commit `feature/eval-longmemeval`, multi-core CPU, no GPU,
-default chunking (1200 / 200), full LongMemEval-S (500 questions).
+Run on commit `feature/p2-real-embedder-bench`, full LongMemEval-S (500
+questions), default chunking (1200 / 200), `fastembed` 0.8 with
+`onnxruntime-gpu` 1.25 on a single RTX 4090 (CUDA 12.9, FP16 reranker
+ONNX). Embedder: `BAAI/bge-small-en-v1.5` (384 dim, the latest in the
+BGE-small line — there is no v2.0 yet). Reranker:
+`BAAI/bge-reranker-v2-m3` (FP16 ONNX, depth 50).
 
-| Mode   | Embedder            | R@5    | R@10  | R@20  | NDCG@10 | MRR   | Wall   |
-| ------ | ------------------- | ------ | ----- | ----- | ------- | ----- | ------ |
-| BM25   | n/a (FTS5)          | **95.6%** | 98.2% | 99.2% | 87.3%   | 89.2% | 55 s   |
-| Hybrid | hash (deterministic)| 88.8%  | 92.2% | 98.2% | 74.7%   | 77.1% | 73 s   |
+| Mode               | R@5      | R@10  | R@20  | NDCG@10  | MRR      | Median latency | Wall  |
+| ------------------ | -------- | ----- | ----- | -------- | -------- | -------------- | ----- |
+| BM25 (FTS5 only)   | 95.6%    | 98.2% | 99.2% | 87.3%    | 89.2%    | 144 ms         | 88 s  |
+| Hybrid (BM25+vec)  | 98.0%    | 99.0% | 99.6% | 91.9%    | 92.7%    | 853 ms         | 456 s |
+| Hybrid + rerank    | **99.6%** | 99.6% | 99.8% | **95.3%** | **95.5%** | 1 178 ms       | 663 s |
+
+Per question type (Hybrid + rerank, n=500):
+
+| Type (n)                          | R@5     | R@10   | NDCG@10 | MRR    |
+| --------------------------------- | ------- | ------ | ------- | ------ |
+| knowledge-update (n=78)           | 100.0%  | 100.0% | 99.8%   | 100.0% |
+| single-session-assistant (n=56)   | 100.0%  | 100.0% | 100.0%  | 100.0% |
+| single-session-user (n=70)        | 100.0%  | 100.0% | 98.1%   | 97.5%  |
+| multi-session (n=133)             | 100.0%  | 100.0% | 92.1%   | 92.5%  |
+| temporal-reasoning (n=133)        | 99.2%   | 99.2%  | 93.7%   | 95.2%  |
+| single-session-preference (n=30)  | 96.7%   | 96.7%  | 88.8%   | 86.2%  |
 
 For reference, `agentmemory` reports `recall_any@5 = 95.2%` on the same
-dataset using BM25 + dense vectors with cross-encoder reranking. Marvin's
-BM25 alone matches that headline number; closing the remaining gap on the
-hardest question types (especially `single-session-preference`) is the
-target for follow-up work on dense retrieval and reranking.
+dataset using BM25 + dense vectors with cross-encoder reranking. Marvin
+hits that headline with BM25 alone (95.6%) and pulls **+4.4 pp** ahead
+with the full hybrid + reranker stack (99.6%). The historically-hardest
+slice (`single-session-preference`) climbs from 73.3% on BM25 → 90.0%
+hybrid → **96.7%** with reranking.
 
-The "hybrid + hash" row is informative rather than aspirational: when the
-real embedder isn't available, Marvin currently falls back to a feature-
-hashing backend whose vectors are essentially random. Mixing them into
-RRF *hurts* relative to BM25-only, so production deployments should
-always have `fastembed` (or a real embedding API) installed.
+#### Cross-encoder reranker lift (full 500q)
 
-#### Cross-encoder reranker lift
+Going from `Hybrid` to `Hybrid + rerank` on the full benchmark with the
+real `bge-small-en-v1.5` embedder:
 
-Measured on a 100-question LongMemEval-S subset, BM25 first-stage (`hash`
-embedder), `--rerank-depth 50`, CPU under heavy concurrent load.
+| Slice                              | Δ R@5    | Δ NDCG@10 | Δ MRR    |
+| ---------------------------------- | -------- | --------- | -------- |
+| All 500                            | +1.6 pp  | +3.4 pp   | +2.8 pp  |
+| `single-session-preference` (n=30) | **+6.7 pp** | **+14.7 pp** | **+19.6 pp** |
+| `single-session-user` (n=70)       | +2.9 pp  | +4.2 pp   | +4.4 pp  |
+| `temporal-reasoning` (n=133)       | +2.2 pp  | +5.0 pp   | +3.5 pp  |
+| `multi-session` (n=133)            | +0.8 pp  | +0.5 pp   | -1.2 pp  |
 
-| Mode           | R@5       | R@10  | NDCG@10   | MRR       | Median latency |
-| -------------- | --------- | ----- | --------- | --------- | -------------- |
-| BM25           | 96.0%     | 99.0% | 88.9%     | 89.5%     | 1.5 s          |
-| BM25 + rerank  | **98.0%** | 99.0% | **94.6%** | **95.3%** | 125 s          |
+Reranking pays off most on the slices where order matters (preferences,
+user-question recall). On `multi-session` the first stage already has
+the gold session in the top-1 most of the time; the cross-encoder mostly
+breaks ties.
 
-Per question type:
+#### Embedder size A/B (100q slice)
 
-| Type (n)                   | R@5 BM25 | R@5 +rerank | NDCG@10 BM25 | NDCG@10 +rerank | MRR BM25 | MRR +rerank |
-| -------------------------- | -------- | ----------- | ------------ | --------------- | -------- | ----------- |
-| single-session-user (n=70) | 97.1%    | 98.6%       | 96.0%        | 98.6%           | 94.7%    | 98.1%       |
-| multi-session (n=30)       | 93.3%    | **96.7%**   | 72.4%        | **85.5%**       | 77.2%    | **88.6%**   |
+`bge-base-en-v1.5` (768 dim, ~210 MB) compared head-to-head with
+`bge-small-en-v1.5` on the first 100 questions, no rerank:
 
-The reranker's value is concentrated where it should be: the harder
-`multi-session` slice jumps **+13.1 pp NDCG@10** and **+11.4 pp MRR**. On
-the easier single-session slice it still delivers a clean +2.6 pp /
-+3.4 pp. Recall@10 was already at ceiling so top-K movement is dominated
-by ordering metrics rather than R@5.
+| Embedder                   | R@5   | R@10   | NDCG@10 | MRR   | Median latency |
+| -------------------------- | ----- | ------ | ------- | ----- | -------------- |
+| `BAAI/bge-small-en-v1.5`   | 97.0% | 98.0%  | 91.6%   | 91.5% | 1 033 ms       |
+| `BAAI/bge-base-en-v1.5`    | 97.0% | 100.0% | 93.7%   | 93.2% | 1 918 ms       |
 
-The latency figure reflects the host this run was executed on (load
-average ~40 during the whole run). On an idle workstation the same
-depth-50 rerank runs in single-digit seconds per query, and on a GPU
-it's milliseconds. Production MCP queries only pay the cost when
-`rerank_enabled=true`.
+`bge-base` improves NDCG/MRR by ~2 pp at roughly 2× the latency. On this
+benchmark the cross-encoder reranker is a much bigger lever than going
+from `bge-small` to `bge-base`, so the default keeps `bge-small-en-v1.5`
+(67 MB, 384 dim) and recommends turning on reranking when ranking
+quality matters.
 
-#### Hybrid with `fastembed` on CPU
+#### Hybrid with `fastembed` on GPU vs CPU
 
-`fastembed`'s ONNX backend has roughly linear-then-superlinear cost in
-sequence length on CPU. With the default 512-char embedding cap, a full
-500-question hybrid run takes several hours on a typical workstation.
-For interactive iteration:
+`fastembed` autodetects CUDA when `onnxruntime-gpu` is installed
+alongside the matching NVIDIA wheels. On the same RTX 4090 host, the
+500q hybrid run takes ~7 minutes (median 853 ms / question); on a
+32-core Threadripper CPU only, it takes 16+ hours because the ~512-char
+chunks hit the bge-small attention quadratically.
+
+To enable GPU inference (CUDA 12.x, cuDNN 9.x):
+
+```bash
+uv pip install onnxruntime-gpu \
+  nvidia-cublas-cu12 nvidia-cuda-runtime-cu12 nvidia-cudnn-cu12 \
+  nvidia-curand-cu12 nvidia-cufft-cu12 nvidia-cuda-nvrtc-cu12 \
+  nvidia-nvjitlink-cu12
+
+# Make the wheel libs visible to the dynamic linker.
+export LD_LIBRARY_PATH="$(python -c '
+import sys, os
+for p in sys.path:
+    nv = os.path.join(p, \"nvidia\")
+    if os.path.isdir(nv):
+        for sub in os.listdir(nv):
+            lib = os.path.join(nv, sub, \"lib\")
+            if os.path.isdir(lib):
+                print(lib)
+' | paste -sd:):$LD_LIBRARY_PATH"
+
+# Reranker: use the FP16 ONNX file instead of the int8-quantised default.
+export MARVIN_RERANK_MODEL_FILE=onnx/model_fp16.onnx
+```
+
+For CPU-only iteration:
 
 - Cap embedding text aggressively: `--max-embed-chars 128` is ~5× faster
   than the default 512 with little recall impact in our spot checks.
 - Use `--limit N` to evaluate on a subset.
 - Use `--mode bm25` for changes that don't touch dense retrieval.
-
-Reducing this cost is on the roadmap (smaller models, batched embedding
-service, optional GPU/Metal backends).
 
 ### Reranking
 
@@ -216,8 +256,11 @@ pass backed by [`fastembed`'s](https://qdrant.github.io/fastembed/)
 multilingual, 568M params, Apache-2.0. BAAI does not publish ONNX weights
 directly, so Marvin registers the community
 [`onnx-community/bge-reranker-v2-m3-ONNX`](https://huggingface.co/onnx-community/bge-reranker-v2-m3-ONNX)
-int8 port (~570 MB, single file) via `TextCrossEncoder.add_custom_model`
-the first time the reranker is constructed. Any reranker listed by
+port via `TextCrossEncoder.add_custom_model` the first time the reranker
+is constructed. The default file is the int8-quantised variant
+(`onnx/model_quantized.onnx`, ~570 MB) which runs well on CPU; GPU users
+can switch to the FP16 variant with
+`MARVIN_RERANK_MODEL_FILE=onnx/model_fp16.onnx`. Any reranker listed by
 `TextCrossEncoder.list_supported_models()` works too — pass e.g.
 `--rerank-model Xenova/ms-marco-MiniLM-L-6-v2` for a faster, English-only
 alternative.
@@ -250,15 +293,13 @@ discards the very signal we need. Scoring the chunks that first-stage
 retrieval already matched, then max-pooling to sessions, recovers the
 signal cleanly.
 
-Performance: with `bge-reranker-v2-m3` quantized to int8 on CPU, 50
-`(query, chunk)` pairs take roughly 2–4 seconds on an idle workstation
-and much more on a heavily-loaded box (see the
-[measured lift table](#cross-encoder-reranker-lift) for a worst-case
-number). Budget a few minutes of wall time per 100 questions in the
-harness, or pick a smaller model (e.g.
-`Xenova/ms-marco-MiniLM-L-6-v2`) for interactive iteration. MCP gateway
-queries pay the reranker cost once per `search()` call and only when
-`rerank_enabled` is set.
+Performance: with `bge-reranker-v2-m3` (FP16 ONNX) on a single RTX 4090,
+the full 500-question hybrid+rerank run takes ~11 minutes (median
+1.18 s / query, +325 ms on top of the no-rerank hybrid). On an int8
+ONNX/CPU path, budget a few minutes of wall time per 100 questions, or
+pick a smaller model (e.g. `Xenova/ms-marco-MiniLM-L-6-v2`) for
+interactive iteration. MCP gateway queries pay the reranker cost once
+per `search()` call and only when `rerank_enabled` is set.
 
 ### Output
 
@@ -266,15 +307,16 @@ The CLI prints a per-question-type breakdown and writes a JSON dump:
 
 ```json
 {
-  "mode": "bm25",
-  "embedding_provider": "hash",
+  "mode": "hybrid",
+  "embedding_provider": "fastembed",
+  "embedding_model": "BAAI/bge-small-en-v1.5",
   "questions": 500,
-  "recall_at_5": 0.956,
-  "recall_at_10": 0.982,
-  "ndcg_at_10": 0.873,
-  "mrr": 0.892,
-  "median_latency_ms": 111.1,
-  "total_seconds": 55.4,
+  "recall_at_5": 0.980,
+  "recall_at_10": 0.990,
+  "ndcg_at_10": 0.919,
+  "mrr": 0.927,
+  "median_latency_ms": 852.6,
+  "total_seconds": 455.9,
   "per_type": { "...": "..." },
   "per_question": [ "...", "..." ]
 }
