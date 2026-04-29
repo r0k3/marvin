@@ -57,6 +57,23 @@ class MarvinSettings(BaseSettings):
     kg_rrf_k: float = Field(default=60.0, gt=0.0)
     kg_fusion_weight: float = Field(default=0.5, ge=0.0)
 
+    # Time-aware re-ranking ("memory decay"). Off by default so any
+    # behaviour change is opt-in. When ``decay_enabled`` is set, the
+    # final note-level RRF score is multiplied by
+    # ``1 + decay_weight * exp(-age_days / decay_half_life_days)`` where
+    # ``age`` is computed from ``note.updated_at`` and a query-time
+    # reference. This is a *freshness boost*, not a staleness penalty:
+    # an old-but-relevant note keeps its full RRF score, but a
+    # comparably-relevant fresh note is preferred. ``decay_weight`` is
+    # the maximum boost (so 1.0 is at most a 2x score for an instant-old
+    # note); ``decay_half_life_days`` controls how quickly that boost
+    # decays. Sensible defaults assume episodic chat notes, where
+    # roughly the last month dominates relevance for "what did I just
+    # say" style queries.
+    decay_enabled: bool = Field(default=False)
+    decay_half_life_days: float = Field(default=30.0, gt=0.0)
+    decay_weight: float = Field(default=0.5, ge=0.0)
+
     # At-ingest entity extraction. Augments ``metadata.links`` (which
     # only carries explicit ``[[wikilinks]]`` produced by the
     # consolidator) with capitalised noun phrases pulled from the body

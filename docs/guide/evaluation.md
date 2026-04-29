@@ -135,6 +135,45 @@ The graph ranker is IDF-weighted (`log((N+1)/(df+0.5))`) so common
 entities (the speaker's name, the platform brand) contribute little
 and rare entities a lot, mirroring BM25's term weighting.
 
+#### Memory decay (time-aware re-ranking)
+
+`hybrid_search` can apply a *freshness boost* on top of the final note
+ranking: notes whose `updated_at` is closer to the query time get a
+multiplicative score lift, capped at `1 + decay_weight` for an
+instant-old note and asymptoting to `1.0` for very old notes. The boost
+is purely additive — old-but-relevant notes never get demoted below
+their honest RRF rank. See `marvin.decay` for the formula.
+
+| setting | default | purpose |
+|---|---|---|
+| `decay_enabled` | `false` | toggle the freshness boost |
+| `decay_half_life_days` | `30.0` | exponential half-life (days) |
+| `decay_weight` | `0.5` | maximum boost (1.0 = double the score for an instant-old note) |
+
+LongMemEval-S impact (n=30, `--question-type knowledge-update`,
+hybrid no-rerank):
+
+| Config | R@5 | NDCG@10 | MRR |
+|---|---|---|---|
+| decay off (control) | 100.0% | 97.6% | 98.3% |
+| decay on, weight=0.05, half-life=14d | 100.0% | 92.3% | 92.8% |
+| decay on, weight=0.5, half-life=30d | 96.7% | 70.1% | 73.4% |
+
+**Decay is a regression on LongMemEval and is therefore off by default.**
+The benchmark's gold sessions are roughly uniformly distributed across
+each haystack's timeline, so favouring fresh sessions pulls noise into
+the top-K. Decay is shipped as opt-in for deployments where freshness
+*is* a relevance prior — typical chat assistants where "what did I just
+say about X?" or "yesterday's bug" overwhelmingly want the latest
+matching note. Tune `decay_weight` very conservatively (≤0.1) and
+benchmark on your own data before flipping it on.
+
+When decay does help is exactly the regime LongMemEval doesn't measure:
+the user *changed their mind* and there are now two contradicting
+notes on the same topic. The agentmemory project surfaces this with
+LLM-based contradiction detection at consolidation time; Marvin's
+roadmap puts that as a separate feature on top of decay.
+
 ### Baseline numbers
 
 Run on commit `feature/p2-real-embedder-bench`, full LongMemEval-S (500

@@ -5,14 +5,16 @@ import math
 import re
 import sqlite3
 from collections import defaultdict
+from datetime import datetime
 from hashlib import sha256
 from pathlib import Path
 
 import numpy as np
 import sqlite_vec
 
+from .decay import age_days_between, freshness_boost, parse_note_timestamp
 from .extraction import _fallback_extract
-from .models import ChunkRecord, MemoryKind, NoteRecord, SearchHit
+from .models import ChunkRecord, MemoryKind, NoteRecord, SearchHit, utc_now
 
 
 def chunk_markdown(note: NoteRecord, chunk_size: int, chunk_overlap: int) -> list[ChunkRecord]:
@@ -117,6 +119,9 @@ class MemoryIndex:
         kg_extract_at_ingest: bool = False,
         kg_ingest_min_length: int = 3,
         kg_ingest_multiword_only: bool = True,
+        decay_enabled: bool = False,
+        decay_half_life_days: float = 30.0,
+        decay_weight: float = 0.5,
     ) -> None:
         self.db_path = db_path
         self.dimensions = dimensions
@@ -144,6 +149,14 @@ class MemoryIndex:
         self.kg_extract_at_ingest = kg_extract_at_ingest
         self.kg_ingest_min_length = max(1, kg_ingest_min_length)
         self.kg_ingest_multiword_only = kg_ingest_multiword_only
+        # Time-aware boost over the final note ranking. Off by default
+        # (opt-in via settings) so existing behaviour is unchanged.
+        # ``decay_weight`` caps the multiplicative boost; setting it to
+        # 0 disables decay even when ``decay_enabled`` is True. See
+        # :mod:`marvin.decay` for the rationale.
+        self.decay_enabled = decay_enabled
+        self.decay_half_life_days = max(1e-3, decay_half_life_days)
+        self.decay_weight = max(0.0, decay_weight)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self.conn = sqlite3.connect(self.db_path)
         self.conn.row_factory = sqlite3.Row
@@ -370,6 +383,7 @@ class MemoryIndex:
         kind: MemoryKind | None = None,
         *,
         include_chunk_text: bool = False,
+        query_time: datetime | None = None,
     ) -> list[SearchHit]:
         """Three-stream retrieval: vec + FTS chunks fused, then RRF-fused with graph.
 
@@ -386,6 +400,14 @@ class MemoryIndex:
         When ``kg_enabled`` is ``False`` or no query entities resolve,
         the graph stream contributes nothing and the result reduces to
         the previous behaviour.
+
+        Memory decay: when ``decay_enabled`` is set on the index, the
+        final note-level score is multiplied by a freshness factor
+        (see :mod:`marvin.decay`). ``query_time`` is the reference
+        moment for "now"; if omitted, the index server's
+        :func:`marvin.models.utc_now` is used. Pass an explicit
+        ``query_time`` for benchmarks/tests where you want
+        reproducible, dataset-relative timestamps.
         """
         per_stream_limit = max(
             limit * self.first_stage_overfetch,
@@ -472,6 +494,11 @@ class MemoryIndex:
         for rank, (path, _) in enumerate(graph_ranking, start=1):
             final_scores[path] += self.kg_fusion_weight / (rrf_k + rank)
 
+        if self.decay_enabled and self.decay_weight > 0.0 and final_scores:
+            self._apply_decay_boost(
+                final_scores, query_time=query_time or utc_now()
+            )
+
         sorted_paths = sorted(
             final_scores, key=lambda path: final_scores[path], reverse=True
         )[:limit]
@@ -495,6 +522,41 @@ class MemoryIndex:
                 )
             )
         return hits
+
+    def _apply_decay_boost(
+        self,
+        scores: dict[str, float],
+        *,
+        query_time: datetime,
+    ) -> None:
+        """Mutate ``scores`` in place with a freshness multiplier.
+
+        Pulls ``updated_at`` for the candidate paths in a single query
+        rather than threading the timestamp through every row in every
+        first-stage stream. Notes whose ``updated_at`` cannot be parsed
+        are left untouched (multiplier = 1.0), matching the no-op
+        contract of :func:`marvin.decay.freshness_boost`.
+        """
+        if not scores:
+            return
+        paths = list(scores.keys())
+        placeholders = ",".join("?" for _ in paths)
+        rows = self.conn.execute(
+            f"SELECT relative_path, updated_at FROM notes "
+            f"WHERE relative_path IN ({placeholders})",
+            paths,
+        ).fetchall()
+        for row in rows:
+            note_time = parse_note_timestamp(row["updated_at"])
+            if note_time is None:
+                continue
+            age = age_days_between(query_time, note_time)
+            multiplier = freshness_boost(
+                age,
+                half_life_days=self.decay_half_life_days,
+                decay_weight=self.decay_weight,
+            )
+            scores[row["relative_path"]] *= multiplier
 
     def _resolve_query_entities(self, query: str) -> list[int]:
         """Return entity ids whose normalized form appears (word-bounded) in ``query``.
