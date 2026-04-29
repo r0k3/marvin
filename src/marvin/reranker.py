@@ -14,6 +14,10 @@ Design notes:
   port (int8 quantized, ~570MB) through :meth:`TextCrossEncoder.add_custom_model`.
   Users can still swap to any natively-supported reranker such as
   ``Xenova/ms-marco-MiniLM-L-6-v2`` or ``BAAI/bge-reranker-base``.
+- The default ONNX file is the int8 quantized variant which is fast on CPU.
+  GPU users can switch to the FP16 variant by setting
+  ``MARVIN_RERANK_MODEL_FILE=onnx/model_fp16.onnx`` (other valid values:
+  ``onnx/model.onnx`` for FP32, ``onnx/model_q4f16.onnx`` for 4-bit-FP16).
 - Backend selection mirrors :mod:`marvin.embeddings`: ``"auto"`` tries
   ``fastembed`` and falls back to a no-op if the model cannot load; ``"none"``
   forces the no-op; ``"fastembed"`` raises on failure.
@@ -26,6 +30,7 @@ Design notes:
 
 from __future__ import annotations
 
+import os
 from collections.abc import Sequence
 from typing import Protocol
 
@@ -106,10 +111,18 @@ class FastEmbedRerankerBackend:
                 m["model"] for m in TextCrossEncoder.list_supported_models()
             }
             if model_name not in supported:
+                # Allow users to override the ONNX file (e.g. switch the int8
+                # quantized default to model_fp16.onnx for GPU inference) via
+                # an env var. The override only applies to custom-registered
+                # models we ship a spec for.
+                model_file = os.environ.get(
+                    "MARVIN_RERANK_MODEL_FILE",
+                    str(spec["model_file"]),
+                )
                 TextCrossEncoder.add_custom_model(
                     model=model_name,
                     sources=ModelSource(hf=str(spec["hf_repo"])),
-                    model_file=str(spec["model_file"]),
+                    model_file=model_file,
                     description=str(spec["description"]),
                     license=str(spec["license"]),
                     size_in_gb=float(spec["size_in_gb"]),
