@@ -148,3 +148,51 @@ class TestCustomModelSpec:
 
         assert svc.score("q", ["d1", "d2"]) == [0.7, 0.1]
         assert fake.calls == [("q", ["d1", "d2"])]
+
+    def test_model_file_env_override(self, monkeypatch):
+        """``MARVIN_RERANK_MODEL_FILE`` overrides the registered ONNX file.
+
+        We don't load the model — only verify the override is forwarded
+        to fastembed's ``add_custom_model`` call. This lets GPU users
+        switch the int8 default to the FP16 variant without code changes.
+        """
+        from marvin.reranker import FastEmbedRerankerBackend
+
+        captured: dict[str, object] = {}
+
+        class _FakeCrossEncoder:
+            @staticmethod
+            def list_supported_models():
+                return []
+
+            @staticmethod
+            def add_custom_model(*, model, sources, model_file, **kwargs):
+                captured["model"] = model
+                captured["model_file"] = model_file
+                captured["hf"] = sources.hf
+
+            def __init__(self, model_name: str) -> None:
+                captured["init_model"] = model_name
+
+        class _FakeModelSource:
+            def __init__(self, *, hf: str) -> None:
+                self.hf = hf
+
+        import sys
+        import types
+
+        fake_ce = types.SimpleNamespace(TextCrossEncoder=_FakeCrossEncoder)
+        fake_md = types.SimpleNamespace(ModelSource=_FakeModelSource)
+        monkeypatch.setitem(sys.modules, "fastembed.rerank.cross_encoder", fake_ce)
+        monkeypatch.setitem(sys.modules, "fastembed.common.model_description", fake_md)
+
+        # 1. Default (no env var): use the spec's int8 quantised file.
+        monkeypatch.delenv("MARVIN_RERANK_MODEL_FILE", raising=False)
+        FastEmbedRerankerBackend(model_name=DEFAULT_RERANK_MODEL)
+        assert captured["model_file"] == "onnx/model_quantized.onnx"
+
+        # 2. With the env var set: the FP16 variant is forwarded instead.
+        captured.clear()
+        monkeypatch.setenv("MARVIN_RERANK_MODEL_FILE", "onnx/model_fp16.onnx")
+        FastEmbedRerankerBackend(model_name=DEFAULT_RERANK_MODEL)
+        assert captured["model_file"] == "onnx/model_fp16.onnx"
