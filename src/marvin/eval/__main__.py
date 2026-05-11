@@ -23,7 +23,6 @@ from marvin.reranker import DEFAULT_RERANK_MODEL, RerankerService
 
 from ._results import resolve_results_path
 from .longmemeval import (
-    Mode,
     BenchSummary,
     format_summary,
     load_dataset,
@@ -309,9 +308,7 @@ def main(argv: list[str] | None = None) -> int:
 
 def _write_summary(summary: BenchSummary, path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        json.dumps(summary.model_dump(mode="json"), indent=2), encoding="utf-8"
-    )
+    path.write_text(json.dumps(summary.model_dump(mode="json"), indent=2), encoding="utf-8")
 
 
 if __name__ == "__main__":

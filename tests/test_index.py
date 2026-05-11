@@ -46,9 +46,7 @@ class TestFtsHitsRobustness:
 
     def _make_note(self, title: str, body: str) -> NoteRecord:
         meta = NoteMetadata(kind=MemoryKind.EPISODIC, title=title)
-        return NoteRecord(
-            path=Path(f"{title}.md"), metadata=meta, body=body, raw_text=body
-        )
+        return NoteRecord(path=Path(f"{title}.md"), metadata=meta, body=body, raw_text=body)
 
     def test_query_with_question_mark_does_not_crash(self):
         index = MemoryIndex(Path(":memory:"), dimensions=8)
@@ -86,10 +84,10 @@ class TestFirstStageOverfetch:
     @pytest.mark.parametrize(
         "limit, overfetch, overfetch_min, expected",
         [
-            (3, 5, 20, 20),    # min wins
-            (10, 5, 20, 50),   # multiplier wins
-            (4, 2, 1, 8),      # multiplier with low floor
-            (1, 5, 1, 5),      # multiplier wins even with min=1
+            (3, 5, 20, 20),  # min wins
+            (10, 5, 20, 50),  # multiplier wins
+            (4, 2, 1, 8),  # multiplier with low floor
+            (1, 5, 1, 5),  # multiplier wins even with min=1
         ],
     )
     def test_per_stream_limit_uses_settings(
@@ -114,9 +112,7 @@ class TestFirstStageOverfetch:
 
         def vec_spy(*, query_embedding, limit, kind):
             captured["vec_limit"] = limit
-            return original_vec(
-                query_embedding=query_embedding, limit=limit, kind=kind
-            )
+            return original_vec(query_embedding=query_embedding, limit=limit, kind=kind)
 
         def fts_spy(*, query, limit, kind):
             captured["fts_limit"] = limit
@@ -172,9 +168,7 @@ def _make_note(
     links: list[str] | None = None,
 ) -> NoteRecord:
     meta = NoteMetadata(kind=kind, title=title, links=links or [])
-    return NoteRecord(
-        path=Path(f"{title}.md"), metadata=meta, body=body, raw_text=body
-    )
+    return NoteRecord(path=Path(f"{title}.md"), metadata=meta, body=body, raw_text=body)
 
 
 def _empty_embeds(n: int, dim: int = 8) -> list[np.ndarray]:
@@ -191,9 +185,7 @@ class TestKgSchemaAndHydration:
     """
 
     def _index(self) -> MemoryIndex:
-        return MemoryIndex(
-            Path(":memory:"), dimensions=8, kg_extract_at_ingest=False
-        )
+        return MemoryIndex(Path(":memory:"), dimensions=8, kg_extract_at_ingest=False)
 
     def test_schema_creates_kg_tables(self) -> None:
         index = self._index()
@@ -227,9 +219,7 @@ class TestKgSchemaAndHydration:
 
             entities = {
                 row["normalized"]: row["name"]
-                for row in index.conn.execute(
-                    "SELECT name, normalized FROM entities"
-                ).fetchall()
+                for row in index.conn.execute("SELECT name, normalized FROM entities").fetchall()
             }
             assert entities == {"quokka": "Quokka", "australia": "Australia"}
 
@@ -253,17 +243,11 @@ class TestKgSchemaAndHydration:
     def test_reupsert_replaces_edges(self) -> None:
         index = self._index()
         try:
-            note = _make_note(
-                "Notes", "First", links=["Quokka", "Australia"]
-            )
+            note = _make_note("Notes", "First", links=["Quokka", "Australia"])
             chunks = chunk_markdown(note, 1200, 200)
-            index.upsert_note(
-                note, "notes", chunks=chunks, embeddings=_empty_embeds(len(chunks))
-            )
+            index.upsert_note(note, "notes", chunks=chunks, embeddings=_empty_embeds(len(chunks)))
 
-            note2 = _make_note(
-                "Notes", "Updated", links=["Wombat"]
-            )
+            note2 = _make_note("Notes", "Updated", links=["Wombat"])
             chunks2 = chunk_markdown(note2, 1200, 200)
             index.upsert_note(
                 note2,
@@ -285,9 +269,7 @@ class TestKgSchemaAndHydration:
             assert {row["normalized"] for row in edges} == {"wombat"}
 
             # Stale entities stay in the registry (cheap, may come back).
-            entity_count = index.conn.execute(
-                "SELECT COUNT(*) FROM entities"
-            ).fetchone()[0]
+            entity_count = index.conn.execute("SELECT COUNT(*) FROM entities").fetchone()[0]
             assert entity_count == 3
         finally:
             index.close()
@@ -298,9 +280,7 @@ class TestKgSchemaAndHydration:
             for path, links in [("a", ["X", "Y"]), ("b", ["Y", "Z"])]:
                 note = _make_note(path, path, links=links)
                 chunks = chunk_markdown(note, 1200, 200)
-                index.upsert_note(
-                    note, path, chunks=chunks, embeddings=_empty_embeds(len(chunks))
-                )
+                index.upsert_note(note, path, chunks=chunks, embeddings=_empty_embeds(len(chunks)))
 
             assert index.prune_deleted_notes(existing_paths={"a"}) == 1
 
@@ -325,12 +305,8 @@ class TestKgSchemaAndHydration:
         try:
             note = _make_note("plain", "no wikilinks here", links=[])
             chunks = chunk_markdown(note, 1200, 200)
-            index.upsert_note(
-                note, "plain", chunks=chunks, embeddings=_empty_embeds(len(chunks))
-            )
-            edge_count = index.conn.execute(
-                "SELECT COUNT(*) FROM entity_edges"
-            ).fetchone()[0]
+            index.upsert_note(note, "plain", chunks=chunks, embeddings=_empty_embeds(len(chunks)))
+            edge_count = index.conn.execute("SELECT COUNT(*) FROM entity_edges").fetchone()[0]
             assert edge_count == 0
         finally:
             index.close()
@@ -338,21 +314,13 @@ class TestKgSchemaAndHydration:
     def test_case_insensitive_dedup_within_note(self) -> None:
         index = self._index()
         try:
-            note = _make_note(
-                "Notes", "x", links=["Apple Card", "apple card", "  APPLE CARD"]
-            )
+            note = _make_note("Notes", "x", links=["Apple Card", "apple card", "  APPLE CARD"])
             chunks = chunk_markdown(note, 1200, 200)
-            index.upsert_note(
-                note, "notes", chunks=chunks, embeddings=_empty_embeds(len(chunks))
-            )
-            entities = index.conn.execute(
-                "SELECT name, normalized FROM entities"
-            ).fetchall()
+            index.upsert_note(note, "notes", chunks=chunks, embeddings=_empty_embeds(len(chunks)))
+            entities = index.conn.execute("SELECT name, normalized FROM entities").fetchall()
             assert len(entities) == 1
             assert entities[0]["normalized"] == "apple card"
-            edges = index.conn.execute(
-                "SELECT COUNT(*) FROM entity_edges"
-            ).fetchone()[0]
+            edges = index.conn.execute("SELECT COUNT(*) FROM entity_edges").fetchone()[0]
             assert edges == 1
         finally:
             index.close()
@@ -364,9 +332,7 @@ class TestKgResolveQueryEntities:
         for path, links in links_per_note.items():
             note = _make_note(path, path, links=links)
             chunks = chunk_markdown(note, 1200, 200)
-            index.upsert_note(
-                note, path, chunks=chunks, embeddings=_empty_embeds(len(chunks))
-            )
+            index.upsert_note(note, path, chunks=chunks, embeddings=_empty_embeds(len(chunks)))
         return index
 
     def test_returns_empty_for_unknown_query(self) -> None:
@@ -401,15 +367,15 @@ class TestKgResolveQueryEntities:
             index.close()
 
     def test_multiple_entities_match(self) -> None:
-        index = self._seeded_index({
-            "a": ["Quokka"],
-            "b": ["Australia"],
-            "c": ["Wombat"],
-        })
+        index = self._seeded_index(
+            {
+                "a": ["Quokka"],
+                "b": ["Australia"],
+                "c": ["Wombat"],
+            }
+        )
         try:
-            ids = index._resolve_query_entities(
-                "where in australia does a quokka live"
-            )
+            ids = index._resolve_query_entities("where in australia does a quokka live")
             assert len(ids) == 2
         finally:
             index.close()
@@ -432,9 +398,7 @@ class TestKgGraphRanker:
         for path, links in layout.items():
             note = _make_note(path, path, links=links)
             chunks = chunk_markdown(note, 1200, 200)
-            index.upsert_note(
-                note, path, chunks=chunks, embeddings=_empty_embeds(len(chunks))
-            )
+            index.upsert_note(note, path, chunks=chunks, embeddings=_empty_embeds(len(chunks)))
         return layout
 
     def test_ranks_by_total_edge_weight(self) -> None:
@@ -460,14 +424,10 @@ class TestKgGraphRanker:
             ):
                 note = _make_note(path, path, kind=kind, links=["Quokka"])
                 chunks = chunk_markdown(note, 1200, 200)
-                index.upsert_note(
-                    note, path, chunks=chunks, embeddings=_empty_embeds(len(chunks))
-                )
+                index.upsert_note(note, path, chunks=chunks, embeddings=_empty_embeds(len(chunks)))
 
             ids = index._resolve_query_entities("quokka")
-            sem_rows = index._graph_hits(
-                query_entity_ids=ids, limit=10, kind=MemoryKind.SEMANTIC
-            )
+            sem_rows = index._graph_hits(query_entity_ids=ids, limit=10, kind=MemoryKind.SEMANTIC)
             assert [row["relative_path"] for row in sem_rows] == ["sem"]
         finally:
             index.close()
@@ -475,9 +435,7 @@ class TestKgGraphRanker:
     def test_empty_query_entities_returns_empty(self) -> None:
         index = MemoryIndex(Path(":memory:"), dimensions=8)
         try:
-            assert index._graph_hits(
-                query_entity_ids=[], limit=10, kind=None
-            ) == []
+            assert index._graph_hits(query_entity_ids=[], limit=10, kind=None) == []
         finally:
             index.close()
 
@@ -508,9 +466,7 @@ class TestKgHybridFusion:
             links=["Quokka"],
         )
         chunks_b = chunk_markdown(b, 1200, 200)
-        index.upsert_note(
-            b, "graph_only", chunks=chunks_b, embeddings=_empty_embeds(len(chunks_b))
-        )
+        index.upsert_note(b, "graph_only", chunks=chunks_b, embeddings=_empty_embeds(len(chunks_b)))
 
     def test_graph_only_note_surfaces_in_results(self) -> None:
         index = MemoryIndex(Path(":memory:"), dimensions=8)
@@ -531,12 +487,8 @@ class TestKgHybridFusion:
         """The graph stream must add an RRF contribution: with kg enabled
         ``graph_only``'s final score must exceed its score with kg
         disabled (where it can only ride on first-stage over-fetch)."""
-        index_on = MemoryIndex(
-            Path(":memory:"), dimensions=8, kg_enabled=True
-        )
-        index_off = MemoryIndex(
-            Path(":memory:"), dimensions=8, kg_enabled=False
-        )
+        index_on = MemoryIndex(Path(":memory:"), dimensions=8, kg_enabled=True)
+        index_off = MemoryIndex(Path(":memory:"), dimensions=8, kg_enabled=False)
         try:
             self._seed_two_notes(index_on)
             self._seed_two_notes(index_off)
@@ -556,15 +508,11 @@ class TestKgHybridFusion:
             index_off.close()
 
     def test_graph_disabled_short_circuits(self) -> None:
-        index = MemoryIndex(
-            Path(":memory:"), dimensions=8, kg_enabled=False
-        )
+        index = MemoryIndex(Path(":memory:"), dimensions=8, kg_enabled=False)
         try:
             self._seed_two_notes(index)
             with (
-                patch.object(
-                    index, "_graph_hits", wraps=index._graph_hits
-                ) as graph_spy,
+                patch.object(index, "_graph_hits", wraps=index._graph_hits) as graph_spy,
                 patch.object(
                     index,
                     "_resolve_query_entities",
@@ -602,9 +550,7 @@ class TestExtractAtIngest:
         # The trade-off: legitimate single-word proper nouns are also
         # dropped. This is intentional; explicit ``[[wikilinks]]`` and
         # the LLM consolidator pick those up later.
-        out = _extract_at_ingest(
-            "I love Spotify and Java.", min_length=3
-        )
+        out = _extract_at_ingest("I love Spotify and Java.", min_length=3)
         assert out == []
 
     def test_multiword_only_false_keeps_single_word_nouns(self) -> None:
@@ -705,9 +651,7 @@ class TestKgUpsertAtIngest:
                 chunks=chunks,
                 embeddings=_empty_embeds(len(chunks)),
             )
-            entity_count = index.conn.execute(
-                "SELECT COUNT(*) FROM entities"
-            ).fetchone()[0]
+            entity_count = index.conn.execute("SELECT COUNT(*) FROM entities").fetchone()[0]
             assert entity_count == 0
         finally:
             index.close()
@@ -739,9 +683,7 @@ class TestKgUpsertAtIngest:
             )
             normalized = {
                 row["normalized"]
-                for row in index.conn.execute(
-                    "SELECT normalized FROM entities"
-                ).fetchall()
+                for row in index.conn.execute("SELECT normalized FROM entities").fetchall()
             }
             assert normalized == {"apple card"}
         finally:
@@ -769,9 +711,7 @@ class TestKgUpsertAtIngest:
             )
             normalized = {
                 row["normalized"]
-                for row in index.conn.execute(
-                    "SELECT normalized FROM entities"
-                ).fetchall()
+                for row in index.conn.execute("SELECT normalized FROM entities").fetchall()
             }
             assert "sarah" in normalized
             assert "seattle" in normalized
@@ -780,9 +720,7 @@ class TestKgUpsertAtIngest:
             index.close()
 
     def test_disabled_setting_skips_extraction(self) -> None:
-        index = MemoryIndex(
-            Path(":memory:"), dimensions=8, kg_extract_at_ingest=False
-        )
+        index = MemoryIndex(Path(":memory:"), dimensions=8, kg_extract_at_ingest=False)
         try:
             note = _make_note(
                 "session_1",
@@ -796,9 +734,7 @@ class TestKgUpsertAtIngest:
                 chunks=chunks,
                 embeddings=_empty_embeds(len(chunks)),
             )
-            entity_count = index.conn.execute(
-                "SELECT COUNT(*) FROM entities"
-            ).fetchone()[0]
+            entity_count = index.conn.execute("SELECT COUNT(*) FROM entities").fetchone()[0]
             assert entity_count == 0
         finally:
             index.close()
@@ -861,9 +797,7 @@ class TestKgUpsertAtIngest:
             )
             normalized = {
                 row["normalized"]
-                for row in index.conn.execute(
-                    "SELECT normalized FROM entities"
-                ).fetchall()
+                for row in index.conn.execute("SELECT normalized FROM entities").fetchall()
             }
             assert "sue" not in normalized
             assert "australia" in normalized
@@ -912,9 +846,7 @@ class TestKgUpsertAtIngest:
             on_paths = [h.path for h in index.hybrid_search(**kw)]
             assert "graph_via_ingest" in on_paths
 
-            index_off = MemoryIndex(
-                Path(":memory:"), dimensions=8, kg_extract_at_ingest=False
-            )
+            index_off = MemoryIndex(Path(":memory:"), dimensions=8, kg_extract_at_ingest=False)
             try:
                 index_off.upsert_note(
                     a,
@@ -930,9 +862,7 @@ class TestKgUpsertAtIngest:
                 )
                 on = {h.path: h.score for h in index.hybrid_search(**kw)}
                 off = {h.path: h.score for h in index_off.hybrid_search(**kw)}
-                assert on["graph_via_ingest"] > off.get(
-                    "graph_via_ingest", 0.0
-                )
+                assert on["graph_via_ingest"] > off.get("graph_via_ingest", 0.0)
             finally:
                 index_off.close()
         finally:
@@ -950,9 +880,7 @@ class TestKgUpsertAtIngest:
             ]:
                 note = _make_note(path, body, links=[])
                 chunks = chunk_markdown(note, 1200, 200)
-                index.upsert_note(
-                    note, path, chunks=chunks, embeddings=_empty_embeds(len(chunks))
-                )
+                index.upsert_note(note, path, chunks=chunks, embeddings=_empty_embeds(len(chunks)))
 
             hits = index.hybrid_search(
                 query="quokka marsupial",
@@ -989,13 +917,9 @@ class TestMemoryDecay:
                 created_at=ts,
                 updated_at=ts,
             )
-            note = NoteRecord(
-                path=Path(f"{path}.md"), metadata=meta, body=body, raw_text=body
-            )
+            note = NoteRecord(path=Path(f"{path}.md"), metadata=meta, body=body, raw_text=body)
             chunks = chunk_markdown(note, 1200, 200)
-            index.upsert_note(
-                note, path, chunks=chunks, embeddings=_empty_embeds(len(chunks))
-            )
+            index.upsert_note(note, path, chunks=chunks, embeddings=_empty_embeds(len(chunks)))
 
     def test_disabled_by_default_keeps_tie_break_stable(self) -> None:
         """Without decay, two notes with identical content rank by their

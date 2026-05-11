@@ -24,7 +24,6 @@ from marvin.eval.longmemeval import (
 )
 from marvin.reranker import RerankerService
 
-
 # ---------------------------------------------------------------------------
 # Pure metric primitives.
 # ---------------------------------------------------------------------------
@@ -176,17 +175,13 @@ def hash_embedder() -> EmbeddingService:
 
 
 class TestRunBenchmark:
-    def test_bm25_perfect_recall_on_planted_needle(
-        self, hash_embedder: EmbeddingService
-    ):
+    def test_bm25_perfect_recall_on_planted_needle(self, hash_embedder: EmbeddingService):
         entries = [
             _planted_entry("q1", needle="zephyrcat"),
             _planted_entry("q2", needle="quantumlemon"),
             _planted_entry("q3", needle="flintdrake"),
         ]
-        summary = run_benchmark(
-            entries, mode="bm25", embedder=hash_embedder, top_k=5, progress=0
-        )
+        summary = run_benchmark(entries, mode="bm25", embedder=hash_embedder, top_k=5, progress=0)
         assert summary.questions == 3
         assert summary.recall_at_5 == 1.0
         assert summary.recall_at_10 == 1.0
@@ -197,9 +192,7 @@ class TestRunBenchmark:
 
     def test_hybrid_runs_end_to_end(self, hash_embedder: EmbeddingService):
         entries = [_planted_entry("q1", needle="zephyrcat")]
-        summary = run_benchmark(
-            entries, mode="hybrid", embedder=hash_embedder, top_k=5, progress=0
-        )
+        summary = run_benchmark(entries, mode="hybrid", embedder=hash_embedder, top_k=5, progress=0)
         assert summary.questions == 1
         # Hash backend is weak but BM25 dominates RRF here so the gold
         # session must still be retrieved.
@@ -207,30 +200,22 @@ class TestRunBenchmark:
 
     def test_vector_runs_end_to_end(self, hash_embedder: EmbeddingService):
         entries = [_planted_entry("q1", needle="zephyrcat")]
-        summary = run_benchmark(
-            entries, mode="vector", embedder=hash_embedder, top_k=5, progress=0
-        )
+        summary = run_benchmark(entries, mode="vector", embedder=hash_embedder, top_k=5, progress=0)
         assert summary.questions == 1
         # Just check the pipeline runs and produces some retrieval.
         assert len(summary.per_question[0].retrieved_session_ids) > 0
 
     def test_summary_serializes_to_json(self, hash_embedder: EmbeddingService):
         entries = [_planted_entry("q1", needle="zephyrcat")]
-        summary = run_benchmark(
-            entries, mode="bm25", embedder=hash_embedder, top_k=5, progress=0
-        )
+        summary = run_benchmark(entries, mode="bm25", embedder=hash_embedder, top_k=5, progress=0)
         payload = summary.model_dump(mode="json")
         # Round-trips through json without errors.
         rendered = json.dumps(payload)
         assert "recall_at_5" in rendered
 
-    def test_format_summary_contains_key_fields(
-        self, hash_embedder: EmbeddingService
-    ):
+    def test_format_summary_contains_key_fields(self, hash_embedder: EmbeddingService):
         entries = [_planted_entry("q1", needle="zephyrcat")]
-        summary = run_benchmark(
-            entries, mode="bm25", embedder=hash_embedder, top_k=5, progress=0
-        )
+        summary = run_benchmark(entries, mode="bm25", embedder=hash_embedder, top_k=5, progress=0)
         text = format_summary(summary)
         assert "recall_any@5" in text
         assert "MRR" in text
@@ -303,13 +288,9 @@ class TestRerankIntegration:
         retrieved = summary.per_question[0].retrieved_session_ids
         assert retrieved[0] == "q1_gold"
 
-    def test_no_reranker_leaves_metadata_empty(
-        self, hash_embedder: EmbeddingService
-    ):
+    def test_no_reranker_leaves_metadata_empty(self, hash_embedder: EmbeddingService):
         entry = _planted_entry("q1", needle="zephyrcat")
-        summary = run_benchmark(
-            [entry], mode="bm25", embedder=hash_embedder, top_k=5, progress=0
-        )
+        summary = run_benchmark([entry], mode="bm25", embedder=hash_embedder, top_k=5, progress=0)
         assert summary.reranker_provider is None
         assert summary.reranker_model is None
         assert summary.rerank_depth is None

@@ -29,9 +29,7 @@ def download(url: str, dest: Path, *, force: bool = False) -> Path:
     tmp = dest.with_suffix(dest.suffix + ".part")
     print(f"downloading {url} -> {dest}")
 
-    request = urllib.request.Request(
-        url, headers={"User-Agent": "marvin-eval/0.1"}
-    )
+    request = urllib.request.Request(url, headers={"User-Agent": "marvin-eval/0.1"})
     with (
         urllib.request.urlopen(request) as response,
         tmp.open("wb") as out,

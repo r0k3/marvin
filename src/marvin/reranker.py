@@ -57,8 +57,7 @@ _CUSTOM_FASTEMBED_MODELS: dict[str, dict[str, object]] = {
         "license": "apache-2.0",
         "size_in_gb": 0.57,
         "description": (
-            "BAAI bge-reranker-v2-m3 cross-encoder (int8 quantized ONNX "
-            "port from onnx-community)."
+            "BAAI bge-reranker-v2-m3 cross-encoder (int8 quantized ONNX port from onnx-community)."
         ),
     },
 }
@@ -113,9 +112,7 @@ class FastEmbedRerankerBackend:
 
         spec = _CUSTOM_FASTEMBED_MODELS.get(model_name)
         if spec is not None:
-            supported = {
-                m["model"] for m in TextCrossEncoder.list_supported_models()
-            }
+            supported = {m["model"] for m in TextCrossEncoder.list_supported_models()}
             if model_name not in supported:
                 # Allow users to override the ONNX file (e.g. switch the int8
                 # quantized default to model_fp16.onnx for GPU inference) via
@@ -249,9 +246,7 @@ def rerank_hits(
         range(len(hits)),
         key=lambda i: (-scores[i], i),
     )
-    reordered = [
-        hits[i].model_copy(update={"score": round(scores[i], 6)}) for i in order
-    ]
+    reordered = [hits[i].model_copy(update={"score": round(scores[i], 6)}) for i in order]
     if limit is not None:
         reordered = reordered[:limit]
     return reordered

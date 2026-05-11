@@ -166,9 +166,7 @@ class TestPrepareSessionUnified:
             assert kinds <= {MemoryKind.PROCEDURAL}
             assert {hit.kind for hit in ctx.semantic} <= {MemoryKind.SEMANTIC}
             assert {hit.kind for hit in ctx.reflective} <= {MemoryKind.REFLECTIVE}
-            assert any(
-                hit.kind == MemoryKind.EPISODIC for hit in ctx.recent_episodes
-            )
+            assert any(hit.kind == MemoryKind.EPISODIC for hit in ctx.recent_episodes)
             assert ctx.task.startswith("how do I structure logging")
         finally:
             service.close()
@@ -220,9 +218,7 @@ class TestPrepareSessionUnified:
                 insight="Always log at module scope.",
             )
 
-            with patch.object(
-                service.reranker, "score", wraps=service.reranker.score
-            ) as score_spy:
+            with patch.object(service.reranker, "score", wraps=service.reranker.score) as score_spy:
                 service.prepare_session(task="how to log in python", limit=6)
             # Single rerank pass over the merged pool, not three.
             assert score_spy.call_count == 1
@@ -355,9 +351,7 @@ def test_hybrid_search_include_chunk_text_flag(tmp_path: Path):
     service.sync()
 
     query_embedding = service.embedder.embed_text("quokka")
-    plain = service.index.hybrid_search(
-        query="quokka", query_embedding=query_embedding, limit=3
-    )
+    plain = service.index.hybrid_search(query="quokka", query_embedding=query_embedding, limit=3)
     rich = service.index.hybrid_search(
         query="quokka",
         query_embedding=query_embedding,

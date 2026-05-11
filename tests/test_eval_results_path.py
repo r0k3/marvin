@@ -4,9 +4,6 @@ from __future__ import annotations
 
 import argparse
 import subprocess
-from pathlib import Path
-
-import pytest
 
 from marvin.eval._results import (
     build_auto_name,
@@ -74,9 +71,7 @@ class TestBuildAutoName:
             ),
         )
         # Order is fixed so two equivalent runs produce the same path.
-        assert name == (
-            "hybrid-bge-base-en-v1-5-rerank-ms-marco-minilm-l-6-v2-limit50-no-kg"
-        )
+        assert name == ("hybrid-bge-base-en-v1-5-rerank-ms-marco-minilm-l-6-v2-limit50-no-kg")
 
 
 class TestGitShortSha:
@@ -86,8 +81,17 @@ class TestGitShortSha:
     def test_returns_short_sha_in_repo(self, tmp_path):
         subprocess.check_call(["git", "init", "-q"], cwd=tmp_path)
         subprocess.check_call(
-            ["git", "-c", "user.email=t@t", "-c", "user.name=t",
-             "commit", "--allow-empty", "-m", "init"],
+            [
+                "git",
+                "-c",
+                "user.email=t@t",
+                "-c",
+                "user.name=t",
+                "commit",
+                "--allow-empty",
+                "-m",
+                "init",
+            ],
             cwd=tmp_path,
         )
         sha = git_short_sha(tmp_path)
@@ -99,8 +103,17 @@ class TestGitShortSha:
     def test_marks_dirty_when_working_tree_modified(self, tmp_path):
         subprocess.check_call(["git", "init", "-q"], cwd=tmp_path)
         subprocess.check_call(
-            ["git", "-c", "user.email=t@t", "-c", "user.name=t",
-             "commit", "--allow-empty", "-m", "init"],
+            [
+                "git",
+                "-c",
+                "user.email=t@t",
+                "-c",
+                "user.name=t",
+                "commit",
+                "--allow-empty",
+                "-m",
+                "init",
+            ],
             cwd=tmp_path,
         )
         # Add an untracked file to dirty the tree.
