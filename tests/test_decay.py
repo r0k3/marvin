@@ -28,9 +28,7 @@ from marvin.decay import (
 class TestFreshnessBoost:
     def test_zero_weight_is_noop(self) -> None:
         assert freshness_boost(0.0, half_life_days=30.0, decay_weight=0.0) == 1.0
-        assert (
-            freshness_boost(1000.0, half_life_days=30.0, decay_weight=0.0) == 1.0
-        )
+        assert freshness_boost(1000.0, half_life_days=30.0, decay_weight=0.0) == 1.0
 
     def test_zero_age_saturates(self) -> None:
         boost = freshness_boost(0.0, half_life_days=30.0, decay_weight=0.5)
@@ -49,9 +47,7 @@ class TestFreshnessBoost:
         assert boost == pytest.approx(1.5)
 
     def test_negative_weight_is_noop(self) -> None:
-        assert (
-            freshness_boost(0.0, half_life_days=30.0, decay_weight=-1.0) == 1.0
-        )
+        assert freshness_boost(0.0, half_life_days=30.0, decay_weight=-1.0) == 1.0
 
 
 class TestAgeDaysBetween:
@@ -80,8 +76,6 @@ class TestParseNoteTimestamp:
         assert parse_note_timestamp("not-a-date") is None
 
     def test_offset_preserved(self) -> None:
-        ts = datetime(
-            2025, 1, 10, 12, 30, tzinfo=UTC
-        ) - timedelta(hours=3)
+        ts = datetime(2025, 1, 10, 12, 30, tzinfo=UTC) - timedelta(hours=3)
         parsed = parse_note_timestamp(ts.isoformat())
         assert parsed == ts

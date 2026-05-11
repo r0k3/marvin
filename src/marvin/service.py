@@ -19,6 +19,8 @@ from .models import (
     SessionContext,
     SyncReport,
 )
+from .reranker import RerankerService
+from .vault import VaultStore, normalize_links, normalize_tags
 
 
 def _parse_decay_kinds(csv: str) -> frozenset[MemoryKind] | None:
@@ -42,8 +44,6 @@ def _parse_decay_kinds(csv: str) -> frozenset[MemoryKind] | None:
         except ValueError:
             continue
     return frozenset(out) if out else frozenset()
-from .reranker import RerankerService
-from .vault import VaultStore, normalize_links, normalize_tags
 
 
 class MarvinService:
@@ -64,11 +64,7 @@ class MarvinService:
             dimensions=self.settings.embedding_dimensions,
         )
         self.reranker = RerankerService(
-            provider=(
-                self.settings.rerank_provider
-                if self.settings.rerank_enabled
-                else "none"
-            ),
+            provider=(self.settings.rerank_provider if self.settings.rerank_enabled else "none"),
             model_name=self.settings.rerank_model,
             max_chars=self.settings.rerank_max_chars,
         )
@@ -212,13 +208,9 @@ class MarvinService:
                 return []
             docs = [(hit.chunk_text or hit.excerpt or hit.title) for hit in pool]
             scores = self.reranker.score(query, docs)
-            order = sorted(
-                range(len(pool)), key=lambda i: (-scores[i], i)
-            )[:limit]
+            order = sorted(range(len(pool)), key=lambda i: (-scores[i], i))[:limit]
             return [
-                pool[i].model_copy(
-                    update={"score": round(scores[i], 6), "chunk_text": None}
-                )
+                pool[i].model_copy(update={"score": round(scores[i], 6), "chunk_text": None})
                 for i in order
             ]
         return self.index.hybrid_search(
@@ -375,20 +367,12 @@ class MarvinService:
             limit=pool_limit,
         )
 
-        procedural = [h for h in pool if h.kind == MemoryKind.PROCEDURAL][
-            :procedural_limit
-        ]
-        semantic = [h for h in pool if h.kind == MemoryKind.SEMANTIC][
-            :semantic_limit
-        ]
-        reflective = [h for h in pool if h.kind == MemoryKind.REFLECTIVE][
-            :reflective_limit
-        ]
+        procedural = [h for h in pool if h.kind == MemoryKind.PROCEDURAL][:procedural_limit]
+        semantic = [h for h in pool if h.kind == MemoryKind.SEMANTIC][:semantic_limit]
+        reflective = [h for h in pool if h.kind == MemoryKind.REFLECTIVE][:reflective_limit]
         # Bypass `self.recent()` so we don't pay for a second sync on the
         # same already-current vault.
-        recent_episodes = self.index.recent(
-            limit=max(2, limit // 3), kind=MemoryKind.EPISODIC
-        )
+        recent_episodes = self.index.recent(limit=max(2, limit // 3), kind=MemoryKind.EPISODIC)
         guidance = self._derive_guidance(procedural, semantic, reflective)
 
         return SessionContext(

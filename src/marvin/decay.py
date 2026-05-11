@@ -42,7 +42,6 @@ import math
 from datetime import datetime
 from typing import Final
 
-
 _SECONDS_PER_DAY: Final[float] = 86_400.0
 
 

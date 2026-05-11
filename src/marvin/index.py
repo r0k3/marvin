@@ -164,9 +164,7 @@ class MemoryIndex:
         self.decay_half_life_days = max(1e-3, decay_half_life_days)
         self.decay_weight = max(0.0, decay_weight)
         self.decay_kinds: frozenset[MemoryKind] = (
-            decay_kinds
-            if decay_kinds is not None
-            else frozenset({MemoryKind.EPISODIC})
+            decay_kinds if decay_kinds is not None else frozenset({MemoryKind.EPISODIC})
         )
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self.conn = sqlite3.connect(self.db_path)
@@ -268,9 +266,7 @@ class MemoryIndex:
                     (chunk_id, packed),
                 )
 
-            self._replace_entity_edges(
-                note_id, self._collect_entity_strings(note)
-            )
+            self._replace_entity_edges(note_id, self._collect_entity_strings(note))
 
     def _collect_entity_strings(self, note: NoteRecord) -> list[str]:
         """Combine explicit wikilinks with at-ingest regex extraction.
@@ -306,9 +302,7 @@ class MemoryIndex:
         collapse to a single entity row; the display name for newly seen
         entities is whatever the note used first.
         """
-        self.conn.execute(
-            "DELETE FROM entity_edges WHERE note_id = ?", (note_id,)
-        )
+        self.conn.execute("DELETE FROM entity_edges WHERE note_id = ?", (note_id,))
         seen: set[str] = set()
         for link in links or []:
             normalized = _normalize_entity(link)
@@ -355,9 +349,7 @@ class MemoryIndex:
                         chunk_ids,
                     )
                 self.conn.execute("DELETE FROM chunks WHERE note_id = ?", (row["id"],))
-                self.conn.execute(
-                    "DELETE FROM entity_edges WHERE note_id = ?", (row["id"],)
-                )
+                self.conn.execute("DELETE FROM entity_edges WHERE note_id = ?", (row["id"],))
                 self.conn.execute("DELETE FROM notes WHERE id = ?", (row["id"],))
                 removed += 1
         return removed
@@ -452,9 +444,7 @@ class MemoryIndex:
                 note_chunk_score[relative_path] = score
                 note_best_chunk[relative_path] = row
 
-        chunk_ranking = sorted(
-            note_chunk_score.items(), key=lambda kv: -kv[1]
-        )
+        chunk_ranking = sorted(note_chunk_score.items(), key=lambda kv: -kv[1])
 
         graph_ranking: list[tuple[str, float]] = []
         if self.kg_enabled:
@@ -466,15 +456,12 @@ class MemoryIndex:
                     kind=kind,
                 )
                 graph_ranking = [
-                    (row["relative_path"], float(row["raw_score"]))
-                    for row in graph_rows
+                    (row["relative_path"], float(row["raw_score"])) for row in graph_rows
                 ]
                 # Backfill best-chunk metadata for notes that the graph
                 # stream surfaced but the chunk-tier missed; otherwise
                 # they have no excerpt to render.
-                missing = [
-                    path for path, _ in graph_ranking if path not in note_best_chunk
-                ]
+                missing = [path for path, _ in graph_ranking if path not in note_best_chunk]
                 if missing:
                     fill_sql = """
                         SELECT
@@ -489,9 +476,7 @@ class MemoryIndex:
                         JOIN notes n ON n.id = c.note_id
                         WHERE n.relative_path IN ({placeholders})
                           AND c.chunk_index = 0
-                    """.format(
-                        placeholders=",".join("?" for _ in missing)
-                    )
+                    """.format(placeholders=",".join("?" for _ in missing))
                     for row in self.conn.execute(fill_sql, missing).fetchall():
                         note_best_chunk[row["relative_path"]] = row
 
@@ -506,13 +491,11 @@ class MemoryIndex:
             final_scores[path] += self.kg_fusion_weight / (rrf_k + rank)
 
         if self.decay_enabled and self.decay_weight > 0.0 and final_scores:
-            self._apply_decay_boost(
-                final_scores, query_time=query_time or utc_now()
-            )
+            self._apply_decay_boost(final_scores, query_time=query_time or utc_now())
 
-        sorted_paths = sorted(
-            final_scores, key=lambda path: final_scores[path], reverse=True
-        )[:limit]
+        sorted_paths = sorted(final_scores, key=lambda path: final_scores[path], reverse=True)[
+            :limit
+        ]
         hits: list[SearchHit] = []
         for path in sorted_paths:
             row = note_best_chunk.get(path)
@@ -584,9 +567,7 @@ class MemoryIndex:
         thousand entities; profile and switch to a precompiled regex
         alternation or trie if a real vault outgrows that.
         """
-        rows = self.conn.execute(
-            "SELECT id, normalized FROM entities"
-        ).fetchall()
+        rows = self.conn.execute("SELECT id, normalized FROM entities").fetchall()
         if not rows:
             return []
         casefold_query = query.casefold()
@@ -595,9 +576,7 @@ class MemoryIndex:
             normalized = row["normalized"] or ""
             if not normalized:
                 continue
-            if re.search(
-                r"\b" + re.escape(normalized) + r"\b", casefold_query
-            ):
+            if re.search(r"\b" + re.escape(normalized) + r"\b", casefold_query):
                 matched.append(row["id"])
         return matched
 
@@ -631,16 +610,14 @@ class MemoryIndex:
                 "SELECT COUNT(*) FROM notes WHERE kind = ?", (kind.value,)
             ).fetchone()
         else:
-            n_notes_row = self.conn.execute(
-                "SELECT COUNT(*) FROM notes"
-            ).fetchone()
+            n_notes_row = self.conn.execute("SELECT COUNT(*) FROM notes").fetchone()
         n_notes = n_notes_row[0] if n_notes_row else 0
         if n_notes == 0:
             return []
 
         placeholders = ",".join("?" for _ in query_entity_ids)
         if kind is not None:
-            df_cte = f"""
+            df_cte = """
                 SELECT ee.entity_id, COUNT(*) AS df
                 FROM entity_edges ee
                 JOIN notes n ON n.id = ee.note_id
@@ -888,20 +865,77 @@ def _normalize_entity(name: str) -> str:
 # entity extractor. Multi-word matches (``Apple Card``) are passed
 # through even when their first token would be a stop-word in isolation;
 # only *single-word* extractions are dropped if they hit this set.
-_INGEST_STOPWORDS: frozenset[str] = frozenset({
-    "the", "this", "that", "these", "those",
-    "and", "but", "for", "yet", "nor",
-    "with", "from", "into", "onto", "upon", "after", "before",
-    "yes", "yeah", "yep", "no", "nope", "okay", "ok", "sure",
-    "hello", "hi", "hey",
-    "how", "what", "when", "where", "why", "who", "which",
-    "she", "they", "you", "his", "her", "him", "them",
-    "their", "your", "yours", "ours", "theirs",
-    "are", "was", "were", "been", "being",
-    "have", "has", "had", "having",
-    "well", "now", "then", "there", "here", "also",
-    "good", "great", "nice", "thanks", "please",
-})
+_INGEST_STOPWORDS: frozenset[str] = frozenset(
+    {
+        "the",
+        "this",
+        "that",
+        "these",
+        "those",
+        "and",
+        "but",
+        "for",
+        "yet",
+        "nor",
+        "with",
+        "from",
+        "into",
+        "onto",
+        "upon",
+        "after",
+        "before",
+        "yes",
+        "yeah",
+        "yep",
+        "no",
+        "nope",
+        "okay",
+        "ok",
+        "sure",
+        "hello",
+        "hi",
+        "hey",
+        "how",
+        "what",
+        "when",
+        "where",
+        "why",
+        "who",
+        "which",
+        "she",
+        "they",
+        "you",
+        "his",
+        "her",
+        "him",
+        "them",
+        "their",
+        "your",
+        "yours",
+        "ours",
+        "theirs",
+        "are",
+        "was",
+        "were",
+        "been",
+        "being",
+        "have",
+        "has",
+        "had",
+        "having",
+        "well",
+        "now",
+        "then",
+        "there",
+        "here",
+        "also",
+        "good",
+        "great",
+        "nice",
+        "thanks",
+        "please",
+    }
+)
 
 
 def _extract_at_ingest(

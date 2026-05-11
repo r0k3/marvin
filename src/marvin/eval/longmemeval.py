@@ -159,9 +159,7 @@ def mean_reciprocal_rank(retrieved: Sequence[str], gold: Iterable[str]) -> float
 # ---------------------------------------------------------------------------
 
 
-def load_dataset(
-    path: Path, *, include_abstention: bool = False
-) -> list[LongMemEvalEntry]:
+def load_dataset(path: Path, *, include_abstention: bool = False) -> list[LongMemEvalEntry]:
     """Load LongMemEval-S JSON file into ``LongMemEvalEntry`` objects."""
     raw = json.loads(Path(path).read_text(encoding="utf-8"))
     if not isinstance(raw, list):
@@ -217,9 +215,7 @@ def _session_to_note(
 # parsing. Returns ``None`` when the format does not match -- the
 # benchmark harness then falls back to ``utc_now()`` so a malformed
 # entry still runs (just without temporal signal).
-_LME_TS_PATTERN = re.compile(
-    r"^(?P<date>\d{4}/\d{2}/\d{2})\s*\([^)]+\)\s*(?P<time>\d{2}:\d{2})$"
-)
+_LME_TS_PATTERN = re.compile(r"^(?P<date>\d{4}/\d{2}/\d{2})\s*\([^)]+\)\s*(?P<time>\d{2}:\d{2})$")
 
 
 def parse_longmemeval_timestamp(value: str | None) -> datetime | None:
@@ -249,9 +245,7 @@ def parse_longmemeval_timestamp(value: str | None) -> datetime | None:
 # ---------------------------------------------------------------------------
 
 
-def _rank_by_path(
-    rows: Sequence[sqlite3.Row], score_fn
-) -> list[tuple[str, float]]:
+def _rank_by_path(rows: Sequence[sqlite3.Row], score_fn) -> list[tuple[str, float]]:
     """Aggregate per-chunk rows into per-note ranking using ``max`` pooling.
 
     ``score_fn`` maps ``(rank, row)`` to a score; we keep the best score
@@ -267,9 +261,7 @@ def _rank_by_path(
     return sorted(best.items(), key=lambda x: x[1], reverse=True)
 
 
-def _bm25_ranking(
-    index: MemoryIndex, query: str, depth: int
-) -> list[tuple[str, float]]:
+def _bm25_ranking(index: MemoryIndex, query: str, depth: int) -> list[tuple[str, float]]:
     rows = index._fts_hits(query=query, limit=depth, kind=None)
     if not rows:
         return []
@@ -277,12 +269,8 @@ def _bm25_ranking(
     return _rank_by_path(rows, lambda rank, row: -float(row["rank"]))
 
 
-def _vector_ranking(
-    index: MemoryIndex, query_embedding, depth: int
-) -> list[tuple[str, float]]:
-    rows = index._vector_hits(
-        query_embedding=query_embedding, limit=depth, kind=None
-    )
+def _vector_ranking(index: MemoryIndex, query_embedding, depth: int) -> list[tuple[str, float]]:
+    rows = index._vector_hits(query_embedding=query_embedding, limit=depth, kind=None)
     if not rows:
         return []
     return _rank_by_path(rows, lambda rank, row: -float(row["distance"]))
@@ -300,9 +288,7 @@ def _hybrid_chunk_rows(
     notes. It returns the top ``depth`` chunk rows with their RRF scores
     so a reranker can operate on the exact snippet that matched.
     """
-    vec_rows = index._vector_hits(
-        query_embedding=query_embedding, limit=depth, kind=None
-    )
+    vec_rows = index._vector_hits(query_embedding=query_embedding, limit=depth, kind=None)
     fts_rows = index._fts_hits(query=query, limit=depth, kind=None)
     scores: dict[int, float] = defaultdict(float)
     details: dict[int, sqlite3.Row] = {}
@@ -334,14 +320,10 @@ def _chunk_rows_for_mode(
     giving it a naive prefix of a long session usually misses the signal.
     """
     if mode == "hybrid":
-        return [row for row, _ in _hybrid_chunk_rows(
-            index, query, query_embedding, depth
-        )]
+        return [row for row, _ in _hybrid_chunk_rows(index, query, query_embedding, depth)]
     if mode == "bm25":
         return index._fts_hits(query=query, limit=depth, kind=None)
-    return index._vector_hits(
-        query_embedding=query_embedding, limit=depth, kind=None
-    )
+    return index._vector_hits(query_embedding=query_embedding, limit=depth, kind=None)
 
 
 # ---------------------------------------------------------------------------
@@ -411,9 +393,7 @@ def _run_question(
 
         if needs_vectors:
             flat_texts = [
-                c.text[:max_embed_chars]
-                for _, _, chunks in per_session_chunks
-                for c in chunks
+                c.text[:max_embed_chars] for _, _, chunks in per_session_chunks for c in chunks
             ]
             flat_embeds = embedder.embed_texts(flat_texts)
         else:
@@ -426,10 +406,7 @@ def _run_question(
                 assert flat_embeds is not None
                 embeddings = flat_embeds[cursor : cursor + n]
             else:
-                embeddings = [
-                    np.zeros(embedder.dimensions, dtype="float32")
-                    for _ in chunks
-                ]
+                embeddings = [np.zeros(embedder.dimensions, dtype="float32") for _ in chunks]
             cursor += n
             index.upsert_note(
                 note,
@@ -438,9 +415,7 @@ def _run_question(
                 embeddings=embeddings,
             )
 
-        query_embedding = (
-            embedder.embed_text(entry.question) if needs_vectors else None
-        )
+        query_embedding = embedder.embed_text(entry.question) if needs_vectors else None
 
         if reranker is not None:
             # Rerank at chunk granularity (the reranker input window is
@@ -479,14 +454,10 @@ def _run_question(
                 )
                 retrieved = [hit.path for hit in hits]
             elif mode == "bm25":
-                ranking = _bm25_ranking(
-                    index, entry.question, depth=max(top_k * 5, 20)
-                )
+                ranking = _bm25_ranking(index, entry.question, depth=max(top_k * 5, 20))
                 retrieved = [path for path, _ in ranking[:top_k]]
             else:  # vector
-                ranking = _vector_ranking(
-                    index, query_embedding, depth=max(top_k * 5, 20)
-                )
+                ranking = _vector_ranking(index, query_embedding, depth=max(top_k * 5, 20))
                 retrieved = [path for path, _ in ranking[:top_k]]
 
     elapsed_ms = (time.perf_counter() - started) * 1000.0
@@ -686,9 +657,7 @@ def format_summary(summary: BenchSummary) -> str:
     if summary.reranker_provider:
         header = f"{header} + rerank"
     lines.append(f"=== LongMemEval-S Results ({header}) ===")
-    lines.append(
-        f"Embedder: {summary.embedding_provider} ({summary.embedding_model})"
-    )
+    lines.append(f"Embedder: {summary.embedding_provider} ({summary.embedding_model})")
     if summary.reranker_provider:
         lines.append(
             f"Reranker: {summary.reranker_provider} ({summary.reranker_model})"
@@ -701,8 +670,7 @@ def format_summary(summary: BenchSummary) -> str:
     lines.append(f"NDCG@10:       {summary.ndcg_at_10 * 100:5.1f}%")
     lines.append(f"MRR:           {summary.mrr * 100:5.1f}%")
     lines.append(
-        f"Median latency: {summary.median_latency_ms:.1f}ms  "
-        f"(total {summary.total_seconds:.1f}s)"
+        f"Median latency: {summary.median_latency_ms:.1f}ms  (total {summary.total_seconds:.1f}s)"
     )
     if summary.per_type:
         lines.append("")

@@ -152,9 +152,7 @@ class TestBootstrap:
         assert [Path(p).name for p in loaded_libs()] == loaded_paths
 
     def test_idempotent(self, tmp_path, monkeypatch):
-        layout = _make_nvidia_layout(
-            tmp_path, {"cuda_runtime": ["libcudart.so.12"]}
-        )
+        layout = _make_nvidia_layout(tmp_path, {"cuda_runtime": ["libcudart.so.12"]})
         monkeypatch.setattr(sys, "path", [str(layout)])
 
         loaded: list[str] = []
@@ -173,9 +171,7 @@ class TestBootstrap:
         # Second call must be a cheap no-op: no extra dlopen.
         assert len(loaded) == 1
 
-    def test_dlopen_failure_does_not_abort_remaining_libs(
-        self, tmp_path, monkeypatch
-    ):
+    def test_dlopen_failure_does_not_abort_remaining_libs(self, tmp_path, monkeypatch):
         layout = _make_nvidia_layout(
             tmp_path,
             {

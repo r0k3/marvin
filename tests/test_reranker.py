@@ -18,10 +18,10 @@ import pytest
 
 from marvin.models import MemoryKind, SearchHit
 from marvin.reranker import (
+    _CUSTOM_FASTEMBED_MODELS,
     DEFAULT_RERANK_MODEL,
     NoOpRerankerBackend,
     RerankerService,
-    _CUSTOM_FASTEMBED_MODELS,
     _hit_to_document,
     rerank_hits,
 )
