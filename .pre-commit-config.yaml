@@ -1,0 +1,27 @@
+# Pre-commit hooks for Marvin.
+#
+# One-time setup:
+#   uv sync --all-groups
+#   uv run pre-commit install
+#
+# Hooks run via ``uv run`` (``language: system``) so they pick up the
+# project's pinned ruff from ``pyproject.toml``. That eliminates the
+# common pre-commit/CI version-drift footgun where a repo-pinned
+# ruff-pre-commit revision diverges from ``ruff>=...`` in dev deps and
+# pre-commit passes while CI fails.
+
+repos:
+  - repo: local
+    hooks:
+      - id: ruff-check
+        name: ruff check
+        entry: uv run ruff check --force-exclude
+        language: system
+        types: [python]
+        require_serial: true
+      - id: ruff-format
+        name: ruff format
+        entry: uv run ruff format --check --force-exclude
+        language: system
+        types: [python]
+        require_serial: true
