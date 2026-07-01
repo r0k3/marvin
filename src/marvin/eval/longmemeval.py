@@ -38,6 +38,9 @@ from marvin.index import MemoryIndex, chunk_markdown
 from marvin.models import MemoryKind, NoteMetadata, NoteRecord, utc_now
 from marvin.reranker import RerankerService
 
+from .judge import Judge, is_abstention
+from .reader import ReaderContextItem, ReaderEngine, build_reader_context
+
 Mode = Literal["bm25", "vector", "hybrid"]
 
 ABSTENTION_TYPES: frozenset[str] = frozenset(
@@ -82,6 +85,8 @@ class QuestionResult(BaseModel):
     ndcg_at_10: float
     mrr: float
     latency_ms: float
+    hypothesis: str | None = None
+    qa_correct: bool | None = None
 
 
 class TypeBreakdown(BaseModel):
@@ -90,6 +95,29 @@ class TypeBreakdown(BaseModel):
     recall_at_10: float
     ndcg_at_10: float
     mrr: float
+    qa_accuracy: float | None = None
+    qa_count: int = 0
+
+
+class QASummary(BaseModel):
+    """Aggregate QA (reader + judge) accuracy across a run.
+
+    ``questions`` counts only questions that received a judge verdict;
+    ``errors`` counts QA-enabled questions where the reader or judge
+    produced no verdict. Abstention questions are tracked separately
+    because they have no gold evidence and are scored by the dedicated
+    abstention judge prompt.
+    """
+
+    reader_model: str
+    judge_model: str
+    reader_top_k: int
+    questions: int = 0
+    correct: int = 0
+    accuracy: float = 0.0
+    errors: int = 0
+    abstention_questions: int = 0
+    abstention_correct: int = 0
 
 
 class BenchSummary(BaseModel):
@@ -111,6 +139,7 @@ class BenchSummary(BaseModel):
     total_seconds: float
     per_type: dict[str, TypeBreakdown]
     per_question: list[QuestionResult] = Field(default_factory=list)
+    qa: QASummary | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -354,6 +383,9 @@ def _run_question(
     reranker: RerankerService | None = None,
     rerank_depth: int = 50,
     index_options: dict[str, object] | None = None,
+    reader: ReaderEngine | None = None,
+    judge: Judge | None = None,
+    reader_top_k: int = 10,
 ) -> QuestionResult:
     import numpy as np
 
@@ -462,6 +494,39 @@ def _run_question(
 
     elapsed_ms = (time.perf_counter() - started) * 1000.0
     gold = entry.answer_session_ids
+
+    # QA arm: feed the top retrieved sessions to the reader, then grade the
+    # answer with the canonical per-type judge. Done after ``elapsed_ms`` so
+    # the reported retrieval latency excludes reader/judge LLM time.
+    hypothesis: str | None = None
+    qa_correct: bool | None = None
+    if reader is not None and judge is not None:
+        note_by_path = {sid: note for sid, note, _ in per_session_chunks}
+        date_by_session = dict(zip(entry.haystack_session_ids, haystack_dates, strict=False))
+        items: list[ReaderContextItem] = []
+        for rel_path in retrieved[:reader_top_k]:
+            note = note_by_path.get(rel_path)
+            if note is None:
+                continue
+            items.append(
+                ReaderContextItem(
+                    kind=note.metadata.kind.value,
+                    session_id=rel_path,
+                    date=date_by_session.get(rel_path, ""),
+                    body=note.body,
+                )
+            )
+        context = build_reader_context(items)
+        reader_result = reader.answer(entry.question, context, question_date=entry.question_date)
+        hypothesis = reader_result.answer
+        qa_correct = judge.judge(
+            question=entry.question,
+            answer=str(entry.answer),
+            hypothesis=hypothesis,
+            question_type=entry.question_type,
+            question_id=entry.question_id,
+        )
+
     return QuestionResult(
         question_id=entry.question_id,
         question_type=entry.question_type,
@@ -473,6 +538,8 @@ def _run_question(
         ndcg_at_10=ndcg_at_k(retrieved, gold, 10),
         mrr=mean_reciprocal_rank(retrieved, gold),
         latency_ms=elapsed_ms,
+        hypothesis=hypothesis,
+        qa_correct=qa_correct,
     )
 
 
@@ -517,6 +584,9 @@ def run_benchmark(
     max_embed_chars: int = 512,
     progress: int = 0,
     index_options: dict[str, object] | None = None,
+    reader: ReaderEngine | None = None,
+    judge: Judge | None = None,
+    reader_top_k: int = 10,
 ) -> BenchSummary:
     """Run the benchmark on ``entries`` and return an aggregated summary.
 
@@ -557,15 +627,23 @@ def run_benchmark(
             vault_root=vault_root,
             max_embed_chars=max_embed_chars,
             index_options=index_options,
+            reader=reader,
+            judge=judge,
+            reader_top_k=reader_top_k,
         )
         results.append(result)
 
         if progress and i % progress == 0:
-            running = sum(r.recall_at_5 for r in results) / len(results)
-            print(
-                f"  [{i:>4}/{len(entries)}]  running R@5: {running * 100:5.1f}%",
-                flush=True,
+            ret_so_far = [r for r in results if r.gold_session_ids]
+            running = (
+                sum(r.recall_at_5 for r in ret_so_far) / len(ret_so_far) if ret_so_far else 0.0
             )
+            line = f"  [{i:>4}/{len(entries)}]  running R@5: {running * 100:5.1f}%"
+            judged = [r for r in results if r.qa_correct is not None]
+            if judged:
+                acc = sum(1 for r in judged if r.qa_correct) / len(judged)
+                line += f"  QA: {acc * 100:5.1f}%"
+            print(line, flush=True)
 
     elapsed = time.perf_counter() - started
     return _summarize(
@@ -575,6 +653,10 @@ def run_benchmark(
         rerank_depth=rerank_depth,
         results=results,
         elapsed_seconds=elapsed,
+        qa_enabled=reader is not None and judge is not None,
+        reader_model=reader.model if reader is not None else None,
+        judge_model=judge.model if judge is not None else None,
+        reader_top_k=reader_top_k,
     )
 
 
@@ -586,10 +668,22 @@ def _summarize(
     rerank_depth: int,
     results: list[QuestionResult],
     elapsed_seconds: float,
+    qa_enabled: bool = False,
+    reader_model: str | None = None,
+    judge_model: str | None = None,
+    reader_top_k: int = 10,
 ) -> BenchSummary:
     reranker_provider = reranker.backend_name if reranker is not None else None
     reranker_model = reranker.model_name if reranker is not None else None
     rerank_depth_value = rerank_depth if reranker is not None else None
+
+    qa_summary = _aggregate_qa(
+        results=results,
+        enabled=qa_enabled,
+        reader_model=reader_model,
+        judge_model=judge_model,
+        reader_top_k=reader_top_k,
+    )
 
     n = len(results)
     if n == 0:
@@ -609,6 +703,7 @@ def _summarize(
             median_latency_ms=0.0,
             total_seconds=elapsed_seconds,
             per_type={},
+            qa=qa_summary,
         )
         return empty
 
@@ -616,16 +711,25 @@ def _summarize(
     for r in results:
         by_type[r.question_type].append(r)
 
-    per_type = {
-        qtype: TypeBreakdown(
+    per_type = {}
+    for qtype, rs in by_type.items():
+        # Retrieval metrics are defined only where gold evidence exists;
+        # abstention questions (empty gold) are scored on QA accuracy only.
+        ret_rs = [r for r in rs if r.gold_session_ids]
+        qa_rs = [r for r in rs if r.qa_correct is not None]
+        per_type[qtype] = TypeBreakdown(
             count=len(rs),
-            recall_at_5=sum(r.recall_at_5 for r in rs) / len(rs),
-            recall_at_10=sum(r.recall_at_10 for r in rs) / len(rs),
-            ndcg_at_10=sum(r.ndcg_at_10 for r in rs) / len(rs),
-            mrr=sum(r.mrr for r in rs) / len(rs),
+            recall_at_5=_mean([r.recall_at_5 for r in ret_rs]),
+            recall_at_10=_mean([r.recall_at_10 for r in ret_rs]),
+            ndcg_at_10=_mean([r.ndcg_at_10 for r in ret_rs]),
+            mrr=_mean([r.mrr for r in ret_rs]),
+            qa_accuracy=(_mean([1.0 if r.qa_correct else 0.0 for r in qa_rs]) if qa_rs else None),
+            qa_count=len(qa_rs),
         )
-        for qtype, rs in by_type.items()
-    }
+
+    # Retrieval aggregates skip abstention so the headline recall numbers
+    # stay comparable to the agentmemory protocol (and to runs without QA).
+    ret_results = [r for r in results if r.gold_session_ids]
 
     sorted_lat = sorted(r.latency_ms for r in results)
     median_lat = sorted_lat[n // 2]
@@ -637,16 +741,51 @@ def _summarize(
         reranker_provider=reranker_provider,
         reranker_model=reranker_model,
         rerank_depth=rerank_depth_value,
-        questions=n,
-        recall_at_5=sum(r.recall_at_5 for r in results) / n,
-        recall_at_10=sum(r.recall_at_10 for r in results) / n,
-        recall_at_20=sum(r.recall_at_20 for r in results) / n,
-        ndcg_at_10=sum(r.ndcg_at_10 for r in results) / n,
-        mrr=sum(r.mrr for r in results) / n,
+        questions=len(ret_results),
+        recall_at_5=_mean([r.recall_at_5 for r in ret_results]),
+        recall_at_10=_mean([r.recall_at_10 for r in ret_results]),
+        recall_at_20=_mean([r.recall_at_20 for r in ret_results]),
+        ndcg_at_10=_mean([r.ndcg_at_10 for r in ret_results]),
+        mrr=_mean([r.mrr for r in ret_results]),
         median_latency_ms=median_lat,
         total_seconds=elapsed_seconds,
         per_type=per_type,
         per_question=results,
+        qa=qa_summary,
+    )
+
+
+def _mean(xs: Sequence[float]) -> float:
+    """Arithmetic mean, 0.0 for an empty sequence."""
+    return sum(xs) / len(xs) if xs else 0.0
+
+
+def _aggregate_qa(
+    *,
+    results: Sequence[QuestionResult],
+    enabled: bool,
+    reader_model: str | None,
+    judge_model: str | None,
+    reader_top_k: int,
+) -> QASummary | None:
+    """Roll up reader/judge verdicts into a run-level QA summary."""
+    if not enabled:
+        return None
+    judged = [r for r in results if r.qa_correct is not None]
+    correct = sum(1 for r in judged if r.qa_correct)
+    errors = sum(1 for r in results if r.qa_correct is None)
+    abs_rs = [r for r in results if is_abstention(r.question_id, r.question_type)]
+    abs_judged = [r for r in abs_rs if r.qa_correct is not None]
+    return QASummary(
+        reader_model=reader_model or "-",
+        judge_model=judge_model or "-",
+        reader_top_k=reader_top_k,
+        questions=len(judged),
+        correct=correct,
+        accuracy=(correct / len(judged) if judged else 0.0),
+        errors=errors,
+        abstention_questions=len(abs_judged),
+        abstention_correct=sum(1 for r in abs_judged if r.qa_correct),
     )
 
 
@@ -669,6 +808,10 @@ def format_summary(summary: BenchSummary) -> str:
     lines.append(f"recall_any@20: {summary.recall_at_20 * 100:5.1f}%")
     lines.append(f"NDCG@10:       {summary.ndcg_at_10 * 100:5.1f}%")
     lines.append(f"MRR:           {summary.mrr * 100:5.1f}%")
+    if summary.qa is not None:
+        lines.append(
+            f"QA accuracy:   {summary.qa.accuracy * 100:5.1f}%  (n={summary.qa.questions})"
+        )
     lines.append(
         f"Median latency: {summary.median_latency_ms:.1f}ms  (total {summary.total_seconds:.1f}s)"
     )
@@ -677,10 +820,23 @@ def format_summary(summary: BenchSummary) -> str:
         lines.append("By question type:")
         for qtype in sorted(summary.per_type):
             br = summary.per_type[qtype]
-            lines.append(
+            line = (
                 f"  {qtype:<32}  R@5 {br.recall_at_5 * 100:5.1f}%  "
                 f"R@10 {br.recall_at_10 * 100:5.1f}%  "
                 f"NDCG@10 {br.ndcg_at_10 * 100:5.1f}%  "
                 f"MRR {br.mrr * 100:5.1f}%  (n={br.count})"
             )
+            if br.qa_accuracy is not None:
+                line += f"  QA {br.qa_accuracy * 100:5.1f}%"
+            lines.append(line)
+    if summary.qa is not None:
+        q = summary.qa
+        lines.append("")
+        lines.append(f"QA: reader={q.reader_model} judge={q.judge_model} top_k={q.reader_top_k}")
+        lines.append(
+            f"  accuracy={q.accuracy * 100:.1f}%  correct={q.correct}/{q.questions}  "
+            f"errors={q.errors}"
+        )
+        if q.abstention_questions:
+            lines.append(f"  abstention: {q.abstention_correct}/{q.abstention_questions} correct")
     return "\n".join(lines)

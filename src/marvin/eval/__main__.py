@@ -22,12 +22,14 @@ from marvin.embeddings import EmbeddingService
 from marvin.reranker import DEFAULT_RERANK_MODEL, RerankerService
 
 from ._results import resolve_results_path
+from .judge import DEFAULT_JUDGE_MODEL, Judge
 from .longmemeval import (
     BenchSummary,
     format_summary,
     load_dataset,
     run_benchmark,
 )
+from .reader import DEFAULT_READER_MODEL, ReaderEngine
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -205,6 +207,49 @@ def _build_parser() -> argparse.ArgumentParser:
         "regression diffs across commits don't clobber each other.",
     )
     parser.add_argument(
+        "--qa",
+        action="store_true",
+        help="Run the end-to-end QA arm: feed the top retrieved sessions to a "
+        "reader LLM, then grade the answer with the canonical LongMemEval "
+        "per-type judge. Reports QA accuracy alongside retrieval metrics. "
+        "Abstention questions are included automatically (they are part of "
+        "the 500-question accuracy denominator).",
+    )
+    parser.add_argument(
+        "--reader-model",
+        default=DEFAULT_READER_MODEL,
+        help=f"LiteLLM model id for the answer-generating reader "
+        f"(default: {DEFAULT_READER_MODEL}). Local by default.",
+    )
+    parser.add_argument(
+        "--reader-api-base",
+        default=None,
+        help="Optional API base URL for the reader LLM (e.g. the local ollama "
+        "endpoint http://localhost:11434).",
+    )
+    parser.add_argument(
+        "--reader-top-k",
+        type=int,
+        default=10,
+        help="How many top retrieved sessions to feed the reader (default: 10). "
+        "Retrieval is near-oracle, so a small context suffices and keeps the "
+        "token budget far below full-history baselines.",
+    )
+    parser.add_argument(
+        "--judge-model",
+        default=DEFAULT_JUDGE_MODEL,
+        help=f"LiteLLM model id for the LLM-as-judge (default: {DEFAULT_JUDGE_MODEL}, a "
+        "frontier remote model, for independence from the local reader; needs the "
+        "provider API key). Point at a local model (e.g. ollama/...) for key-free "
+        "iteration. Comparability comes from the per-type prompts + protocol, not the "
+        "judge model.",
+    )
+    parser.add_argument(
+        "--judge-api-base",
+        default=None,
+        help="Optional API base URL for the judge LLM (for a local judge).",
+    )
+    parser.add_argument(
         "--progress",
         type=int,
         default=25,
@@ -225,7 +270,9 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 2
 
-    entries = load_dataset(args.dataset, include_abstention=args.include_abstention)
+    # The QA arm scores all 500 questions including abstention, so pull them
+    # in whenever --qa is set (retrieval metrics still skip them downstream).
+    entries = load_dataset(args.dataset, include_abstention=args.include_abstention or args.qa)
     if args.question_type:
         wanted = set(args.question_type)
         entries = [e for e in entries if e.question_type in wanted]
@@ -251,9 +298,17 @@ def main(argv: list[str] | None = None) -> int:
         # Eagerly load so a missing model surfaces before we churn on data.
         _ = reranker.backend_name
 
+    reader: ReaderEngine | None = None
+    judge: Judge | None = None
+    if args.qa:
+        reader = ReaderEngine(model=args.reader_model, api_base=args.reader_api_base)
+        judge = Judge(model=args.judge_model, api_base=args.judge_api_base)
+
     mode_banner = args.mode + (" + rerank" if reranker else "")
     if args.decay:
         mode_banner += " + decay"
+    if args.qa:
+        mode_banner += f" + qa(reader={args.reader_model}, judge={args.judge_model})"
     print(
         f"Running LongMemEval-S in {mode_banner} mode on {len(entries)} questions...",
         flush=True,
@@ -282,6 +337,9 @@ def main(argv: list[str] | None = None) -> int:
         max_embed_chars=args.max_embed_chars,
         progress=args.progress,
         index_options=index_options,
+        reader=reader,
+        judge=judge,
+        reader_top_k=args.reader_top_k,
     )
 
     print()
