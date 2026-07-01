@@ -42,13 +42,13 @@ def extract_entities(text: str) -> list[str]:
 
     # Use OLLAMA as default if no external API key is provided, matching our V2 Docker setup.
     # User can override via standard LANGEXTRACT_API_KEY / GEMINI_API_KEY environment variables
-    # or by setting MARVIN_EXTRACT_MODEL (e.g. 'gpt-5.4' or 'ollama/qwen3.5:9b')
+    # or by setting MARVIN_EXTRACT_MODEL (e.g. 'gpt-5.4' or 'ollama/qwen3.6:35b-a3b-q4_K_M')
     model_id = os.environ.get("MARVIN_EXTRACT_MODEL")
     if not model_id:
         has_api_key = any(
             k in os.environ for k in ("LANGEXTRACT_API_KEY", "GEMINI_API_KEY", "OPENAI_API_KEY")
         )
-        model_id = "gpt-5.4" if has_api_key else "ollama/qwen3.5:9b"
+        model_id = "gpt-5.4" if has_api_key else "ollama/qwen3.6:35b-a3b-q4_K_M"
 
     try:
         doc = lx.extract(
