@@ -68,40 +68,21 @@ async def run_worker():
 
     async def handle_sleep(payload: dict):
         logger.info("Worker starting computational sleep (Consolidation)...")
-        # Find all un-consolidated episodic memories
-        episodes = service.vault.list_notes(kind=service.vault._parse_kind("episodic"))
+        # Phase 1 (episodic -> semantic): entity-scoped extraction with a
+        # per-entity threshold; consumed episodes are marked consolidated.
+        facts = service.consolidate_semantic(engine=consolidation_engine)
 
-        # In a real impl, we'd check for a 'consolidated: true' frontmatter flag.
-        # For MVP, we'll just take the 5 most recent.
-        recent_eps = sorted(episodes, key=lambda x: x.metadata.created_at, reverse=True)[:5]
-        texts = [ep.body for ep in recent_eps]
+        # Phase 2 (semantic -> reflective): synthesize insights from the
+        # accumulated semantic facts, grounded in what is stored.
+        reflections = service.consolidate_reflective(engine=consolidation_engine)
 
-        if not texts:
-            logger.info("No episodes to consolidate.")
-            return
-
-        result = consolidation_engine.consolidate_episodes(texts)
-
-        # Write new Semantic facts
-        for item in result.get("semantic", []):
-            service.remember_semantic(
-                concept=item.get("concept", "Learned Fact"),
-                content=item.get("fact", ""),
+        if facts or reflections:
+            git_manager.commit(
+                "chore(sleep): consolidation (episodic->semantic, semantic->reflective)"
             )
-
-        # Write new Procedural rules
-        for item in result.get("procedural", []):
-            service.store_procedure(
-                title=item.get("title", "New Rule"), steps=[item.get("rule", "")]
-            )
-
-        # Write new Reflective insights
-        for item in result.get("reflective", []):
-            service.reflect(title=item.get("title", "New Insight"), insight=item.get("insight", ""))
-
-        if result.get("semantic") or result.get("procedural"):
-            git_manager.commit("chore(sleep): nightly consolidation completed")
-            logger.info("Consolidation successful.")
+            logger.info("Consolidation: %d facts, %d insights.", len(facts), len(reflections))
+        else:
+            logger.info("No consolidation produced this pass.")
 
     await broker.subscribe("memory.created", handle_memory_created)
     await broker.subscribe("memory.sleep", handle_sleep)

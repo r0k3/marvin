@@ -2,7 +2,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from marvin.config import MarvinSettings
-from marvin.models import MemoryKind, SearchHit
+from marvin.models import FactAspect, MemoryKind, SearchHit
 from marvin.reranker import RerankerService
 from marvin.service import MarvinService
 
@@ -59,6 +59,123 @@ def test_service_basic_flow(tmp_path: Path):
     assert "Python Logging" in [r.title for r in recent]
 
     service.close()
+
+
+def test_remember_semantic_writes_structured_fact(tmp_path: Path):
+    settings = MarvinSettings(
+        vault_path=tmp_path / "vault",
+        state_dir=tmp_path / ".state",
+        embedding_provider="hash",
+    )
+    service = MarvinService(settings)
+    try:
+        service.remember_semantic(
+            concept="Database Configuration",
+            predicate="storage",
+            value="The project uses PostgreSQL with asyncpg.",
+            aspect=FactAspect.DECISION,
+            confidence=0.8,
+            source={"test": "structured"},
+        )
+
+        note = service.vault.find_note(title="Database Configuration", kind=MemoryKind.SEMANTIC)
+        assert note is not None
+        assert len(note.metadata.facts) == 1
+        fact = note.metadata.facts[0]
+        assert fact.predicate == "storage"
+        assert fact.value == "The project uses PostgreSQL with asyncpg."
+        assert fact.aspect == FactAspect.DECISION
+        assert fact.confidence == 0.8
+        assert fact.source == {"test": "structured"}
+        assert "- storage: The project uses PostgreSQL with asyncpg." in note.body
+    finally:
+        service.close()
+
+
+def test_remember_semantic_deduplicates_exact_active_fact(tmp_path: Path):
+    settings = MarvinSettings(
+        vault_path=tmp_path / "vault",
+        state_dir=tmp_path / ".state",
+        embedding_provider="hash",
+    )
+    service = MarvinService(settings)
+    try:
+        for _ in range(2):
+            service.remember_semantic(
+                concept="Runtime",
+                predicate="python",
+                value="Use Python 3.12 or newer.",
+            )
+
+        note = service.vault.find_note(title="Runtime", kind=MemoryKind.SEMANTIC)
+        assert note is not None
+        assert len(note.metadata.facts) == 1
+        assert note.metadata.facts[0].value == "Use Python 3.12 or newer."
+    finally:
+        service.close()
+
+
+def test_remember_semantic_deprecates_same_predicate_update(tmp_path: Path):
+    settings = MarvinSettings(
+        vault_path=tmp_path / "vault",
+        state_dir=tmp_path / ".state",
+        embedding_provider="hash",
+    )
+    service = MarvinService(settings)
+    try:
+        service.remember_semantic(
+            concept="Project Owner",
+            predicate="owner",
+            value="Alice owns the project.",
+        )
+        service.remember_semantic(
+            concept="Project Owner",
+            predicate="owner",
+            value="Bob owns the project.",
+        )
+
+        note = service.vault.find_note(title="Project Owner", kind=MemoryKind.SEMANTIC)
+        assert note is not None
+        facts = note.metadata.facts
+        assert len(facts) == 2
+        old, new = facts
+        assert old.deprecated is True
+        assert old.replaced_by == new.id
+        assert new.deprecated is False
+        assert "## Deprecated Facts" in note.body
+        assert "~~owner: Alice owns the project.~~" in note.body
+    finally:
+        service.close()
+
+
+def test_remember_semantic_lazily_migrates_legacy_facts(tmp_path: Path):
+    settings = MarvinSettings(
+        vault_path=tmp_path / "vault",
+        state_dir=tmp_path / ".state",
+        embedding_provider="hash",
+    )
+    service = MarvinService(settings)
+    try:
+        legacy_path, _ = service.vault.write_note(
+            kind=MemoryKind.SEMANTIC,
+            title="Legacy Note",
+            body="## Facts\n- Existing legacy bullet.",
+        )
+        legacy = service.vault.read_note(legacy_path)
+        assert legacy.metadata.facts == []
+
+        service.remember_semantic(
+            concept="Legacy Note",
+            predicate="new_fact",
+            value="Structured addition.",
+        )
+
+        note = service.vault.read_note(legacy_path)
+        values = [fact.value for fact in note.metadata.facts]
+        assert values == ["Existing legacy bullet.", "Structured addition."]
+        assert note.metadata.facts[0].source == {"migration": "legacy-facts-section"}
+    finally:
+        service.close()
 
 
 class _FakeReranker(RerankerService):
