@@ -17,7 +17,7 @@ DEFAULT_URL = (
     "https://huggingface.co/datasets/xiaowu0162/longmemeval-cleaned/"
     "resolve/main/longmemeval_s_cleaned.json"
 )
-DEFAULT_DEST = Path("experiments/data/longmemeval_s_cleaned.json")
+DEFAULT_DEST = Path("data/longmemeval_s_cleaned.json")
 
 
 def download(url: str, dest: Path, *, force: bool = False) -> Path:

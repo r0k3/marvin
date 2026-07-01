@@ -35,5 +35,9 @@ marvin_vault/
 *.db-shm
 *.db-wal
 
+# Benchmark dataset + result artifacts (machine-generated; may be a symlink)
+/data
+/results
+
 # Stray session/tool files
 session
