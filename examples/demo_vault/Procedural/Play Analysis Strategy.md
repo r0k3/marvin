@@ -16,7 +16,6 @@ links:
 - scene
 - character emotions
 - authority
-- '[[authority'
 aliases: []
 source: {}
 ---
@@ -24,7 +23,7 @@ source: {}
 # [[Play Analysis Strategy]]
 
 ## [[Procedure]]
-1. Identify the [[ruler]] or [[[[authority]] figure]] in the [[scene]].
+1. Identify the [[ruler]] or [[authority figure]] in the [[scene]].
 2. Identify who is petitioning the [[authority]].
 3. Map out the [[power dynamics]] before analyzing [[character emotions]].
 
@@ -37,4 +36,3 @@ source: {}
 - [[scene]]
 - [[character emotions]]
 - [[authority]]
-- [[[[authority]]
