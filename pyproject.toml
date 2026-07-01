@@ -1,6 +1,6 @@
 [project]
 name = "marvin"
-version = "0.1.0"
+version = "0.2.0"
 description = "Obsidian-native long-term memory for coding and chat agents over MCP"
 readme = "README.md"
 license = "MIT"
@@ -87,3 +87,4 @@ ignore = ["E501"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]
+testpaths = ["tests"]
