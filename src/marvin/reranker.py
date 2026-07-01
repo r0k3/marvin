@@ -14,10 +14,11 @@ Design notes:
   port (int8 quantized, ~570MB) through :meth:`TextCrossEncoder.add_custom_model`.
   Users can still swap to any natively-supported reranker such as
   ``Xenova/ms-marco-MiniLM-L-6-v2`` or ``BAAI/bge-reranker-base``.
-- The default ONNX file is the int8 quantized variant which is fast on CPU.
-  GPU users can switch to the FP16 variant by setting
-  ``MARVIN_RERANK_MODEL_FILE=onnx/model_fp16.onnx`` (other valid values:
-  ``onnx/model.onnx`` for FP32, ``onnx/model_q4f16.onnx`` for 4-bit-FP16).
+- The ONNX weights are auto-selected by device: int8 (fast on CPU) when no
+  CUDA provider is present, fp16 on a CUDA-capable host (the CUDA execution
+  provider does not accelerate int8 matmul, so int8-on-GPU is ~100x slower).
+  Override with ``MARVIN_RERANK_MODEL_FILE`` (e.g. ``onnx/model.onnx`` for
+  FP32, ``onnx/model_q4f16.onnx`` for 4-bit-FP16).
 - Backend selection mirrors :mod:`marvin.embeddings`: ``"auto"`` tries
   ``fastembed`` and falls back to a no-op if the model cannot load; ``"none"``
   forces the no-op; ``"fastembed"`` raises on failure.
@@ -103,6 +104,7 @@ class FastEmbedRerankerBackend:
 
         gpu.bootstrap()
 
+        import onnxruntime as ort
         from fastembed.common.model_description import ModelSource
         from fastembed.rerank.cross_encoder import TextCrossEncoder
 
@@ -110,18 +112,20 @@ class FastEmbedRerankerBackend:
         self.batch_size = batch_size
         self.max_chars = max_chars
 
+        # Run on the GPU when onnxruntime exposes a CUDA provider (marvin[gpu]).
+        # The int8 default ONNX is tuned for CPU and is ~100x slower than the
+        # fp16 variant on the CUDA execution provider (which does not
+        # accelerate int8 matmul), so prefer fp16 weights on GPU.
+        cuda = "CUDAExecutionProvider" in ort.get_available_providers()
+
         spec = _CUSTOM_FASTEMBED_MODELS.get(model_name)
         if spec is not None:
             supported = {m["model"] for m in TextCrossEncoder.list_supported_models()}
             if model_name not in supported:
-                # Allow users to override the ONNX file (e.g. switch the int8
-                # quantized default to model_fp16.onnx for GPU inference) via
-                # an env var. The override only applies to custom-registered
-                # models we ship a spec for.
-                model_file = os.environ.get(
-                    "MARVIN_RERANK_MODEL_FILE",
-                    str(spec["model_file"]),
-                )
+                # Allow users to override the ONNX file via an env var; else
+                # pick fp16 on GPU, int8 on CPU.
+                default_file = "onnx/model_fp16.onnx" if cuda else str(spec["model_file"])
+                model_file = os.environ.get("MARVIN_RERANK_MODEL_FILE", default_file)
                 TextCrossEncoder.add_custom_model(
                     model=model_name,
                     sources=ModelSource(hf=str(spec["hf_repo"])),
@@ -131,7 +135,7 @@ class FastEmbedRerankerBackend:
                     size_in_gb=float(spec["size_in_gb"]),
                 )
 
-        self._model = TextCrossEncoder(model_name=model_name)
+        self._model = TextCrossEncoder(model_name=model_name, cuda=cuda)
 
     def score(self, query: str, documents: Sequence[str]) -> list[float]:
         if not documents:

@@ -54,10 +54,19 @@ class FastEmbedBackend:
 
         gpu.bootstrap()
 
+        import os
+
         from fastembed import TextEmbedding
 
         self.dimensions = dimensions
-        self._model = TextEmbedding(model_name=model_name)
+        # bge-small is tiny and fast on CPU; pin it to the CPU provider when
+        # MARVIN_EMBED_CPU=1 so it doesn't contend for GPU memory with a large
+        # co-resident model (e.g. an ollama reader spanning both GPUs). Without
+        # the flag, fastembed selects CUDA when onnxruntime-gpu is present.
+        kwargs: dict[str, object] = {}
+        if os.environ.get("MARVIN_EMBED_CPU") == "1":
+            kwargs["providers"] = ["CPUExecutionProvider"]
+        self._model = TextEmbedding(model_name=model_name, **kwargs)
 
     def embed_texts(self, texts: list[str]) -> list[np.ndarray]:
         return [np.asarray(vec, dtype=np.float32) for vec in self._model.embed(texts)]
