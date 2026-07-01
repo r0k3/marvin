@@ -88,19 +88,30 @@ def create_app(settings: MarvinSettings) -> FastMCP:
             "path": str(note.path.relative_to(settings.resolved_vault_path)),
             "tags": note.metadata.tags,
             "links": note.metadata.links,
+            "facts": [
+                fact.model_dump(mode="json", exclude_none=True) for fact in note.metadata.facts
+            ],
             "body": note.body,
         }
 
     @app.tool(description="Store durable factual knowledge in semantic memory.")
     def marvin_remember_semantic(
         concept: str,
-        content: str,
+        content: str | None = None,
+        predicate: str | None = None,
+        value: str | None = None,
+        aspect: str = "knowledge",
+        confidence: float = 0.6,
         tags: list[str] | None = None,
         links: list[str] | None = None,
     ) -> MemoryWriteResult:
         return service.remember_semantic(
             concept=concept,
             content=content,
+            predicate=predicate,
+            value=value,
+            aspect=aspect,
+            confidence=confidence,
             tags=tags,
             links=links,
             source={"tool": "marvin_remember_semantic"},
@@ -126,6 +137,47 @@ def create_app(settings: MarvinSettings) -> FastMCP:
             links=links,
             source={"tool": "marvin_store_procedure"},
         )
+
+    @app.tool(
+        description=(
+            "Register a K-line procedural template: a response strategy with trigger"
+            " conditions (intents / styles / entity_types / keyword trigger_phrases)"
+            " and an ordered plan, selectable by marvin_prepare_session."
+        )
+    )
+    def marvin_register_template(
+        title: str,
+        plan: list[str],
+        intents: list[str] | None = None,
+        styles: list[str] | None = None,
+        entity_types: list[str] | None = None,
+        trigger_phrases: list[str] | None = None,
+        slots: list[str] | None = None,
+        failure_modes: list[str] | None = None,
+        tags: list[str] | None = None,
+    ) -> MemoryWriteResult:
+        return service.register_template(
+            title=title,
+            plan=plan,
+            intents=intents,
+            styles=styles,
+            entity_types=entity_types,
+            trigger_phrases=trigger_phrases,
+            slots=slots,
+            failure_modes=failure_modes,
+            tags=tags,
+            source={"tool": "marvin_register_template"},
+        )
+
+    @app.tool(
+        description=(
+            "Record whether a K-line template helped, updating its usage count and"
+            " effectiveness (ACT-R-style utility) so effective templates rank higher."
+        )
+    )
+    def marvin_record_template_use(title: str, success: bool) -> dict[str, str]:
+        service.record_template_use(title, success=success)
+        return {"status": "recorded", "title": title}
 
     @app.tool(description="Log a completed task, event, or session into episodic memory.")
     def marvin_log_episode(
