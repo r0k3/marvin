@@ -18,7 +18,12 @@ from .models import ChunkRecord, MemoryKind, NoteRecord, SearchHit, utc_now
 
 
 def chunk_markdown(note: NoteRecord, chunk_size: int, chunk_overlap: int) -> list[ChunkRecord]:
-    sections = _split_sections(note.body)
+    body = (
+        _strip_deprecated_fact_sections(note.body)
+        if note.kind == MemoryKind.SEMANTIC
+        else note.body
+    )
+    sections = _split_sections(body)
     chunks: list[ChunkRecord] = []
     carry = ""
     chunk_index = 0
@@ -62,11 +67,26 @@ def chunk_markdown(note: NoteRecord, chunk_size: int, chunk_overlap: int) -> lis
                 text=(
                     f"Title: {note.metadata.title}\n"
                     f"Kind: {note.metadata.kind.value}\n\n"
-                    f"{note.body.strip()}"
+                    f"{body.strip()}"
                 ).strip(),
             )
         )
     return chunks
+
+
+def _strip_deprecated_fact_sections(body: str) -> str:
+    lines = body.splitlines()
+    kept: list[str] = []
+    skipping = False
+    for line in lines:
+        if line.startswith("## ") or line.startswith("### "):
+            heading = line.lstrip("# ").strip().casefold()
+            skipping = heading == "deprecated facts"
+            if skipping:
+                continue
+        if not skipping:
+            kept.append(line)
+    return "\n".join(kept).strip()
 
 
 def _split_sections(body: str) -> list[tuple[str, str]]:
@@ -353,6 +373,29 @@ class MemoryIndex:
                 self.conn.execute("DELETE FROM notes WHERE id = ?", (row["id"],))
                 removed += 1
         return removed
+
+    def clear(self) -> None:
+        """Drop all derived data so the index can be rebuilt from the vault.
+
+        Deleting from ``chunks`` cascades to ``chunks_fts`` via trigger; the
+        dense ``chunks_vec`` rows are removed explicitly (same as pruning).
+        """
+        with self.conn:
+            self.conn.execute("DELETE FROM chunks_vec")
+            self.conn.execute("DELETE FROM chunks")
+            self.conn.execute("DELETE FROM entity_edges")
+            self.conn.execute("DELETE FROM entities")
+            self.conn.execute("DELETE FROM notes")
+
+    def note_count(self) -> int:
+        """Number of notes currently registered in the index."""
+        row = self.conn.execute("SELECT COUNT(*) AS n FROM notes").fetchone()
+        return int(row["n"]) if row else 0
+
+    def indexed_paths(self) -> set[str]:
+        """Relative paths of every note registered in the index."""
+        rows = self.conn.execute("SELECT relative_path FROM notes").fetchall()
+        return {row["relative_path"] for row in rows}
 
     def recent(self, limit: int, kind: MemoryKind | None = None) -> list[SearchHit]:
         query = "SELECT title, kind, relative_path, tags_json, links_json FROM notes"

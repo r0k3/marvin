@@ -7,7 +7,7 @@ from pathlib import Path
 
 import yaml
 
-from .models import MemoryKind, NoteMetadata, NoteRecord, utc_now
+from .models import MemoryKind, NoteMetadata, NoteRecord, SemanticFact, utc_now
 
 FRONTMATTER_RE = re.compile(r"^---\n(.*?)\n---\n?", re.DOTALL)
 HEADING_RE = re.compile(r"^#\s+(.+)$", re.MULTILINE)
@@ -86,9 +86,13 @@ class VaultStore:
         tags: list[str] | None = None,
         links: list[str] | None = None,
         aliases: list[str] | None = None,
-        source: dict[str, str] | None = None,
+        source: dict[str, object] | None = None,
+        facts: list[SemanticFact] | None = None,
         existing_path: Path | None = None,
         unique: bool = False,
+        consolidated: bool | None = None,
+        usage_count: int | None = None,
+        effectiveness: float | None = None,
     ) -> tuple[Path, bool]:
         path = existing_path or self.note_path(kind, title, unique=unique)
         created = not path.exists()
@@ -111,6 +115,14 @@ class VaultStore:
         metadata.links = normalize_links((links or []) + extract_wikilinks(body))
         metadata.aliases = normalize_links(aliases or metadata.aliases)
         metadata.source = source or metadata.source
+        if facts is not None:
+            metadata.facts = list(facts)
+        if consolidated is not None:
+            metadata.consolidated = consolidated
+        if usage_count is not None:
+            metadata.usage_count = usage_count
+        if effectiveness is not None:
+            metadata.effectiveness = effectiveness
 
         frontmatter = {
             "id": metadata.id,
@@ -123,6 +135,18 @@ class VaultStore:
             "aliases": metadata.aliases,
             "source": metadata.source,
         }
+        if metadata.facts:
+            frontmatter["facts"] = [
+                fact.model_dump(mode="json", exclude_none=True) for fact in metadata.facts
+            ]
+        # Only persist the flag once true, to avoid churning every note's
+        # frontmatter with ``consolidated: false``.
+        if metadata.consolidated:
+            frontmatter["consolidated"] = True
+        # Adaptive template stats: persisted only once a template has been used.
+        if metadata.usage_count or metadata.effectiveness:
+            frontmatter["usage_count"] = metadata.usage_count
+            frontmatter["effectiveness"] = round(metadata.effectiveness, 4)
 
         rendered = self._render_note(
             title=title, frontmatter=frontmatter, body=body, links=metadata.links
@@ -140,6 +164,13 @@ class VaultStore:
         links = normalize_links((frontmatter.get("links") or []) + extract_wikilinks(body))
         aliases = normalize_links(frontmatter.get("aliases") or [])
         source = frontmatter.get("source") or {}
+        facts = self._parse_facts(frontmatter.get("facts"))
+        consolidated = bool(frontmatter.get("consolidated", False))
+        usage_count = int(frontmatter.get("usage_count", 0) or 0)
+        try:
+            effectiveness = float(frontmatter.get("effectiveness", 0.0) or 0.0)
+        except (TypeError, ValueError):
+            effectiveness = 0.0
 
         metadata = NoteMetadata(
             id=str(
@@ -153,6 +184,10 @@ class VaultStore:
             links=links,
             aliases=aliases,
             source=source,
+            facts=facts,
+            consolidated=consolidated,
+            usage_count=usage_count,
+            effectiveness=effectiveness,
         )
         return NoteRecord(path=path, metadata=metadata, body=body.strip(), raw_text=raw_text)
 
@@ -164,6 +199,26 @@ class VaultStore:
             for path in sorted(folder.glob("*.md")):
                 notes.append(self.read_note(path))
         return notes
+
+    def unconsolidated_episodes(self) -> list[NoteRecord]:
+        """Episodic notes not yet processed by the consolidation pass."""
+        return [n for n in self.list_notes(MemoryKind.EPISODIC) if not n.metadata.consolidated]
+
+    def mark_consolidated(self, path: Path, value: bool = True) -> None:
+        """Flip a note's ``consolidated`` flag, preserving body/facts/metadata."""
+        note = self.read_note(path)
+        self.write_note(
+            kind=note.metadata.kind,
+            title=note.metadata.title,
+            body=note.body,
+            tags=note.metadata.tags,
+            links=note.metadata.links,
+            aliases=note.metadata.aliases,
+            source=note.metadata.source,
+            facts=note.metadata.facts,
+            existing_path=path,
+            consolidated=value,
+        )
 
     def find_note(self, *, title: str, kind: MemoryKind) -> NoteRecord | None:
         normalized = title.casefold().strip()
@@ -241,3 +296,16 @@ class VaultStore:
             except ValueError:
                 return utc_now()
         return utc_now()
+
+    def _parse_facts(self, value: object) -> list[SemanticFact]:
+        if not isinstance(value, list):
+            return []
+        facts: list[SemanticFact] = []
+        for item in value:
+            if not isinstance(item, dict):
+                continue
+            try:
+                facts.append(SemanticFact.model_validate(item))
+            except Exception:
+                continue
+        return facts

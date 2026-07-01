@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from marvin.models import MemoryKind
+from marvin.models import FactAspect, MemoryKind, SemanticFact
 from marvin.vault import VaultStore
 
 
@@ -33,6 +33,42 @@ def test_write_and_read_note(tmp_path: Path):
     assert "Related Concept" in note.metadata.links
     assert "This is a test fact" in note.body
     assert "[[Related Concept]]" in note.raw_text
+
+
+def test_semantic_facts_round_trip_in_frontmatter(tmp_path: Path):
+    store = VaultStore(tmp_path)
+    fact = SemanticFact(
+        subject="Test Concept",
+        predicate="storage",
+        value="Facts are canonical in Markdown frontmatter.",
+        aspect=FactAspect.DECISION,
+        confidence=0.9,
+        source={"test": "vault"},
+    )
+    path, created = store.write_note(
+        kind=MemoryKind.SEMANTIC,
+        title="Test Concept",
+        body="## Facts\n- storage: Facts are canonical in Markdown frontmatter.",
+        facts=[fact],
+    )
+    assert created
+
+    note = store.read_note(path)
+    assert len(note.metadata.facts) == 1
+    restored = note.metadata.facts[0]
+    assert restored.id == fact.id
+    assert restored.aspect == FactAspect.DECISION
+    assert restored.confidence == 0.9
+    assert restored.source == {"test": "vault"}
+
+    store.write_note(
+        kind=MemoryKind.SEMANTIC,
+        title="Test Concept",
+        body=note.body,
+        existing_path=path,
+    )
+    rewritten = store.read_note(path)
+    assert [f.id for f in rewritten.metadata.facts] == [fact.id]
 
 
 def test_list_and_find_notes(tmp_path: Path):

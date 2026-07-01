@@ -144,6 +144,54 @@ class TestFirstStageOverfetch:
         index.close()
 
 
+class TestSemanticFactChunking:
+    def test_deprecated_facts_are_not_chunked(self) -> None:
+        note = NoteRecord(
+            path=Path("Project.md"),
+            metadata=NoteMetadata(kind=MemoryKind.SEMANTIC, title="Project"),
+            body=(
+                "## Facts\n"
+                "- owner: Bob owns the project.\n\n"
+                "## Deprecated Facts\n"
+                "- ~~owner: Alice owns the project.~~ [DEPRECATED]\n"
+            ),
+            raw_text="",
+        )
+
+        chunks = chunk_markdown(note, 1200, 200)
+        joined = "\n".join(chunk.text for chunk in chunks)
+        assert "Bob owns the project" in joined
+        assert "Alice owns the project" not in joined
+        assert "Deprecated Facts" not in joined
+
+    def test_deprecated_facts_are_not_fts_indexed(self) -> None:
+        index = MemoryIndex(Path(":memory:"), dimensions=8)
+        try:
+            note = NoteRecord(
+                path=Path("Project.md"),
+                metadata=NoteMetadata(kind=MemoryKind.SEMANTIC, title="Project"),
+                body=(
+                    "## Facts\n"
+                    "- owner: Bob owns the project.\n\n"
+                    "## Deprecated Facts\n"
+                    "- ~~owner: Alice owns the project.~~ [DEPRECATED]\n"
+                ),
+                raw_text="",
+            )
+            chunks = chunk_markdown(note, 1200, 200)
+            index.upsert_note(
+                note,
+                "Project.md",
+                chunks=chunks,
+                embeddings=_empty_embeds(len(chunks)),
+            )
+
+            assert index._fts_hits(query="Bob", limit=5, kind=None)
+            assert index._fts_hits(query="Alice", limit=5, kind=None) == []
+        finally:
+            index.close()
+
+
 class TestNormalizeEntity:
     @pytest.mark.parametrize(
         "raw, expected",
