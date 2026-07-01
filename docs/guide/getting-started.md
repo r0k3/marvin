@@ -2,10 +2,11 @@
 
 ## Quick Installation
 
-For standard usage without the advanced worker node, install the core package:
+For standard usage without the advanced worker node, install the core package
+straight from GitHub:
 
 ```bash
-uv tool install marvin
+uv tool install git+https://github.com/r0k3/marvin
 ```
 
 ### Starting the Local MCP Gateway
@@ -43,9 +44,10 @@ To utilize the **Background Brain Worker** (for automatic consolidation and deep
    docker compose up -d
    ```
 
-3. Download the NLP model into your local instance (Only required on first boot!):
+3. Download the local consolidation model (only required on first boot — any
+   litellm-supported model works; this is the default):
    ```bash
-   docker exec -it marvin-ollama-1 ollama run qwen3.5:9b
+   docker exec -it marvin-ollama-1 ollama pull qwen3.6:35b-a3b-q4_K_M
    ```
 
 4. Load the **Marvin Skill**. 

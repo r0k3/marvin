@@ -1,8 +1,11 @@
 # Evaluation
 
-Marvin ships with a reproducible retrieval benchmark so changes to chunking,
-embeddings, ranking, or fusion can be measured against an external
-reference rather than vibes.
+Marvin ships with a reproducible benchmark so changes to chunking, embeddings,
+ranking, or fusion can be measured against an external reference rather than
+vibes. It has two arms: **retrieval** (does the right session reach the
+top-K?) and **end-to-end QA** (`--qa`: does a reader LLM, fed the retrieved
+memories, actually answer correctly under the benchmark's official judging
+protocol?).
 
 ## LongMemEval-S
 
@@ -15,10 +18,12 @@ of those sessions. We use the
 release, the same one that `agentmemory` reports against, so numbers are
 directly comparable.
 
-The harness measures **retrieval only**: for each question we build a
-fresh in-memory index from that question's haystack, run a search with
-the question text, and check whether any gold session id appears in the
-top-K results.
+For each question the harness builds a fresh in-memory index from that
+question's haystack, runs a search with the question text, and checks
+whether any gold session id appears in the top-K results. With `--qa` it
+additionally feeds the top retrieved sessions to a reader LLM and grades
+the answer with the official per-question-type judge (see
+[End-to-end QA](#end-to-end-qa-reader-judge) below).
 
 ### Metrics
 
@@ -38,15 +43,15 @@ python scripts/download_longmemeval.py
 
 # 2. Run the BM25 baseline on all 500 questions (~1 minute).
 python -m marvin.eval \
-    --dataset experiments/data/longmemeval_s_cleaned.json \
+    --dataset data/longmemeval_s_cleaned.json \
     --mode bm25 \
-    --output experiments/results/bm25.json
+    --output results/bm25.json
 
 # 3. Run hybrid retrieval (BM25 + dense vectors via fastembed).
 python -m marvin.eval \
-    --dataset experiments/data/longmemeval_s_cleaned.json \
+    --dataset data/longmemeval_s_cleaned.json \
     --mode hybrid \
-    --output experiments/results/hybrid.json
+    --output results/hybrid.json
 
 # 4. Quick sanity check without downloading any embedding model.
 python -m marvin.eval --dataset PATH --mode bm25 \
@@ -184,8 +189,8 @@ roadmap puts that as a separate feature on top of decay.
 
 ### Baseline numbers
 
-Run on commit `feature/p2-real-embedder-bench`, full LongMemEval-S (500
-questions), default chunking (1200 / 200), `fastembed` 0.8 with
+Full LongMemEval-S (500 questions), default chunking (1200 / 200),
+`fastembed` 0.8 with
 `onnxruntime-gpu` 1.25 on a single RTX 4090 (CUDA 12.9, FP16 reranker
 ONNX). Embedder: `BAAI/bge-small-en-v1.5` (384 dim, the latest in the
 BGE-small line — there is no v2.0 yet). Reranker:
@@ -262,11 +267,12 @@ the `gpu` extra:
 
 ```bash
 uv pip install 'marvin[gpu]'
-
-# Optional: reranker uses the FP16 ONNX file (5x faster on GPU than the
-# int8 CPU default).
-export MARVIN_RERANK_MODEL_FILE=onnx/model_fp16.onnx
 ```
+
+With the extra installed, the reranker automatically selects the FP16 ONNX
+weights (the CUDA execution provider does not accelerate int8 matmul, so the
+int8 CPU default would be ~100x slower on GPU). `MARVIN_RERANK_MODEL_FILE`
+still overrides the choice explicitly.
 
 The `gpu` extra pulls in `onnxruntime-gpu` and the matching
 `nvidia-*-cu12` wheels (~2.5 GB on disk). At first use,
@@ -285,6 +291,85 @@ For CPU-only iteration:
 - Use `--limit N` to evaluate on a subset.
 - Use `--mode bm25` for changes that don't touch dense retrieval.
 
+### End-to-end QA (reader + judge)
+
+Retrieval on LongMemEval-S is effectively **saturated** (99.6% `recall_any@5`
+— the gold session is in the top-5 for 498/500 questions), so end-to-end
+accuracy is gated by the *reader*, not by retrieval. The `--qa` arm measures
+that directly:
+
+- **Reader:** the top `--reader-top-k` (default 10) retrieved sessions are
+  presented as a JSON array of kind-labelled, timestamped memory entries, and
+  the reader answers using **JSON + Chain-of-Note** — the best-performing
+  reading strategy in the original LongMemEval paper. Abstention is
+  permitted (30 of the 500 questions are unanswerable by design). Default
+  reader: `ollama/qwen3.6:35b-a3b-q4_K_M` — local and quantized.
+- **Judge:** a faithful re-implementation of the official evaluation
+  (`xiaowu0162/LongMemEval` → `evaluate_qa.py`): the exact per-question-type
+  yes/no prompts, `temperature=0`, and the dedicated abstention branch.
+  Comparability comes from the prompts and protocol; the judge model is
+  configurable (`--judge-model`, default: an independent frontier model).
+- **Scoring:** QA accuracy is over all 500 questions (abstention included);
+  retrieval aggregates keep excluding abstention per the official protocol,
+  so the recall numbers above stay comparable.
+
+```bash
+# Retrieval + local-reader QA. MARVIN_EMBED_CPU=1 keeps the embedder off the
+# GPU so it never contends with the local reader.
+MARVIN_EMBED_CPU=1 python -m marvin.eval \
+    --dataset data/longmemeval_s_cleaned.json \
+    --rerank --qa \
+    --reader-model ollama/qwen3.6:35b-a3b-q4_K_M \
+    --reader-api-base http://localhost:11434 \
+    --results-dir results
+```
+
+#### Results (full 500 questions)
+
+Reader: `qwen3.6:35b-a3b` (q4_K_M, local via ollama — a quantized 35B
+mixture-of-experts with ~3B active parameters). Judge: an independent
+frontier model under the official per-type protocol.
+
+| Question type | recall@5 | QA accuracy | n |
+|---|---|---|---|
+| single-session-assistant | 100.0% | **100.0%** | 56 |
+| single-session-user | 100.0% | 95.7% | 70 |
+| knowledge-update | 100.0% | 88.5% | 78 |
+| temporal-reasoning | 99.2% | 83.5% | 133 |
+| single-session-preference | 96.7% | 70.0% | 30 |
+| multi-session | 100.0% | 67.7% | 133 |
+| **Overall** | **99.6%** | **82.8%** (414/500) | 500 |
+
+For context, the strongest published LongMemEval-S results cluster around
+90–93% — all driven by frontier *cloud* readers (vendor-reported, varied
+judges). Marvin reaches 82.8% with a **local, quantized** reader, no cloud
+dependency, and zero LLM calls on the write or query path. The residual gap
+is reader capability, not memory: on the hardest slice (multi-session
+counting), most failures occur with *all* gold sessions already in the
+reader's context.
+
+The number is robust to the judge: re-grading the same hypotheses with the
+local reader model as judge ("self-grading") yields 82.6% overall — identical
+within noise — so an independent judge does not inflate the result.
+
+#### Ablation: retrieval vs. full long-context
+
+Would a long-context model make the memory layer unnecessary? Same local
+reader and judge, varying only the context, on a stratified 48-question
+sample (8 per type):
+
+| Context | Tokens/question | Overall QA |
+|---|---|---|
+| Full history (~45 sessions) | ~126k | 45.8% |
+| **Retrieval + rerank (top-10)** | **~16k** | **81.2%** |
+
+Retrieval beats full-context by **+35 points while using ~8× fewer tokens**
+— a textbook lost-in-the-middle failure for the full-context arm (the
+single-session-assistant slice collapses to 0% when the one relevant session
+is buried among ~45). The memory layer is not a cost optimization bolted
+onto a long-context model; it is what makes a local model accurate at all
+on this benchmark.
+
 ### Reranking
 
 Hybrid retrieval is strong at *finding* the right chunk but RRF only uses
@@ -301,10 +386,10 @@ multilingual, 568M params, Apache-2.0. BAAI does not publish ONNX weights
 directly, so Marvin registers the community
 [`onnx-community/bge-reranker-v2-m3-ONNX`](https://huggingface.co/onnx-community/bge-reranker-v2-m3-ONNX)
 port via `TextCrossEncoder.add_custom_model` the first time the reranker
-is constructed. The default file is the int8-quantised variant
-(`onnx/model_quantized.onnx`, ~570 MB) which runs well on CPU; GPU users
-can switch to the FP16 variant with
-`MARVIN_RERANK_MODEL_FILE=onnx/model_fp16.onnx`. Any reranker listed by
+is constructed. The ONNX weights are selected by device: the int8-quantised
+variant (`onnx/model_quantized.onnx`, ~570 MB) on CPU, the FP16 variant on a
+CUDA-capable host, with `MARVIN_RERANK_MODEL_FILE` as an explicit override.
+Any reranker listed by
 `TextCrossEncoder.list_supported_models()` works too — pass e.g.
 `--rerank-model Xenova/ms-marco-MiniLM-L-6-v2` for a faster, English-only
 alternative.
@@ -312,12 +397,12 @@ alternative.
 ```bash
 # BM25 retrieval + cross-encoder reranking on the first 50 questions.
 python -m marvin.eval \
-    --dataset experiments/data/longmemeval_s_cleaned.json \
+    --dataset data/longmemeval_s_cleaned.json \
     --mode bm25 \
     --rerank \
     --rerank-depth 50 \
     --limit 50 \
-    --output experiments/results/bm25_rerank.json
+    --output results/bm25_rerank.json
 ```
 
 Flags:
@@ -361,12 +446,12 @@ listing.
 
 ```bash
 # Same SHA, three runs, no clobbering:
-python -m marvin.eval --dataset PATH --mode bm25       --results-dir experiments/results
-# -> experiments/results/263e199/bm25.json
-python -m marvin.eval --dataset PATH --mode hybrid     --results-dir experiments/results
-# -> experiments/results/263e199/hybrid.json
-python -m marvin.eval --dataset PATH --mode hybrid --rerank --results-dir experiments/results
-# -> experiments/results/263e199/hybrid-rerank.json
+python -m marvin.eval --dataset PATH --mode bm25       --results-dir results
+# -> results/263e199/bm25.json
+python -m marvin.eval --dataset PATH --mode hybrid     --results-dir results
+# -> results/263e199/hybrid.json
+python -m marvin.eval --dataset PATH --mode hybrid --rerank --results-dir results
+# -> results/263e199/hybrid-rerank.json
 ```
 
 The schema:
@@ -399,7 +484,7 @@ from marvin.embeddings import EmbeddingService
 from marvin.eval.longmemeval import load_dataset, run_benchmark
 from marvin.reranker import RerankerService
 
-entries = load_dataset(Path("experiments/data/longmemeval_s_cleaned.json"))
+entries = load_dataset(Path("data/longmemeval_s_cleaned.json"))
 summary = run_benchmark(
     entries[:50],
     mode="hybrid",

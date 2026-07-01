@@ -18,10 +18,10 @@ Marvin V2 operates as a suite of lightweight services orchestrated via Docker Co
 *   **Transport:** Exposes endpoints via SSE (Server-Sent Events) over HTTP, with a fallback to `stdio` for basic CLI runners.
 *   **Data Flow:** Receives memory write/search requests. Writes raw Markdown to the Vault. Queries the `sqlite-vec` index for fast retrieval. Publishes asynchronous events to the Message Broker.
 
-### 2. The Hybrid Index (`index.py` & `embeddings.py`)
+### 2. The Hybrid Index (`index.py`, `embeddings.py` & `reranker.py`)
 *   **Role:** Extremely fast retrieval engine that operates natively over the Markdown vault.
-*   **Technology:** Uses `sqlite-vec` for embedded vector search and SQLite FTS5 for full-text keyword search.
-*   **Mechanism:** Chunks Markdown files, generates ONNX-based local embeddings (via `fastembed`), and combines vector similarity with keyword ranking using **Reciprocal Rank Fusion (RRF)**.
+*   **Technology:** Uses `sqlite-vec` for embedded vector search, SQLite FTS5 for full-text keyword search, and an `entity_edges` table hydrated from `[[Wikilinks]]`.
+*   **Mechanism:** Chunks Markdown files, generates ONNX-based local embeddings (via `fastembed`), and fuses three streams with **Reciprocal Rank Fusion (RRF)**: vector similarity, keyword ranking, and an IDF-weighted entity-graph ranking. An optional cross-encoder reranker (`bge-reranker-v2-m3`, int8 on CPU / fp16 on GPU) re-scores the fused candidates, and an opt-in time-aware freshness boost favours recent episodic notes. Deprecated semantic facts are excluded at chunking time, so corrected knowledge never resurfaces in search.
 
 ### 3. Git-Backed Vault Management (`vault.py` & `git.py`)
 *   **Role:** The single source of truth for all memory.
@@ -41,8 +41,13 @@ Marvin V2 operates as a suite of lightweight services orchestrated via Docker Co
 
 ### 6. The Consolidation Engine (`consolidation.py`)
 *   **Role:** The cognitive backend used by the Brain Worker.
-*   **Technology:** `litellm` bridging to a local **Ollama** container (e.g., running `qwen3.5:9b`).
-*   **Mechanism:** Follows a strict JSON-enforced prompt to extract high-level `Semantic` facts (architectural truths) and `Procedural` rules (coding conventions) from a list of raw episodes.
+*   **Technology:** `litellm` bridging to a local **Ollama** container (default model: `qwen3.6:35b-a3b-q4_K_M`).
+*   **Mechanism:** Two JSON-enforced phases. **Phase 1 (episodic → semantic):** episodes are grouped by the entities they mention; once an entity crosses a minimum-episode threshold, atomic facts (predicate / value / aspect / confidence) are extracted, deduplicated against the entity's known facts, and persisted — consumed episodes are marked `consolidated` so they are never re-processed. **Phase 2 (semantic → reflective):** accumulated facts are grouped by aspect and synthesized into higher-order reflective insights (patterns, gaps, anomalies, lessons) with provenance links back to the source entities.
+
+### 7. The Cognitive Layer (`models.py`, `klines.py` & `service.py`)
+*   **Role:** The paper-aligned memory semantics on top of storage and retrieval.
+*   **Structured facts:** `SemanticFact` records (subject / predicate / value / aspect / confidence) live canonically in YAML frontmatter; a new fact with the same concept + predicate soft-deprecates the old value with a `replaced_by` link, keeping corrections auditable.
+*   **K-line templates:** Procedural notes can carry trigger conditions (intents, styles, entity types, keyword phrases) plus a plan, slots, and failure modes. `match_template` scores them with weighted partial-matching (intent 0.5 as a hard gate, style 0.25, entity type 0.25, capped keyword bonus) and prefers templates with a higher adaptive utility (usage count + effectiveness EMA). `prepare_session` surfaces the winning template's plan directly into session guidance.
 
 ## Data Flow Diagram
 
