@@ -149,12 +149,13 @@ class TestCustomModelSpec:
         assert svc.score("q", ["d1", "d2"]) == [0.7, 0.1]
         assert fake.calls == [("q", ["d1", "d2"])]
 
-    def test_model_file_env_override(self, monkeypatch):
-        """``MARVIN_RERANK_MODEL_FILE`` overrides the registered ONNX file.
+    def test_model_file_selection(self, monkeypatch):
+        """ONNX file + provider selection: int8 on CPU, fp16 on GPU, env overrides.
 
-        We don't load the model — only verify the override is forwarded
-        to fastembed's ``add_custom_model`` call. This lets GPU users
-        switch the int8 default to the FP16 variant without code changes.
+        We don't load the model — only verify what gets forwarded to
+        fastembed's ``add_custom_model`` and ``TextCrossEncoder``. The int8
+        default is fast on CPU; the CUDA execution provider does not
+        accelerate int8 matmul, so a CUDA-capable host defaults to fp16.
         """
         from marvin.reranker import FastEmbedRerankerBackend
 
@@ -171,8 +172,9 @@ class TestCustomModelSpec:
                 captured["model_file"] = model_file
                 captured["hf"] = sources.hf
 
-            def __init__(self, model_name: str) -> None:
+            def __init__(self, model_name: str, cuda: bool = False) -> None:
                 captured["init_model"] = model_name
+                captured["cuda"] = cuda
 
         class _FakeModelSource:
             def __init__(self, *, hf: str) -> None:
@@ -186,13 +188,26 @@ class TestCustomModelSpec:
         monkeypatch.setitem(sys.modules, "fastembed.rerank.cross_encoder", fake_ce)
         monkeypatch.setitem(sys.modules, "fastembed.common.model_description", fake_md)
 
-        # 1. Default (no env var): use the spec's int8 quantised file.
+        cpu_only = ["CPUExecutionProvider"]
+        with_cuda = ["CUDAExecutionProvider", "CPUExecutionProvider"]
+
+        # 1. CPU host (no CUDA provider), no env var: int8 default, cuda off.
         monkeypatch.delenv("MARVIN_RERANK_MODEL_FILE", raising=False)
+        monkeypatch.setattr("onnxruntime.get_available_providers", lambda: cpu_only)
         FastEmbedRerankerBackend(model_name=DEFAULT_RERANK_MODEL)
         assert captured["model_file"] == "onnx/model_quantized.onnx"
+        assert captured["cuda"] is False
 
-        # 2. With the env var set: the FP16 variant is forwarded instead.
+        # 2. CUDA host, no env var: fp16 default, cuda on.
         captured.clear()
+        monkeypatch.setattr("onnxruntime.get_available_providers", lambda: with_cuda)
+        FastEmbedRerankerBackend(model_name=DEFAULT_RERANK_MODEL)
+        assert captured["model_file"] == "onnx/model_fp16.onnx"
+        assert captured["cuda"] is True
+
+        # 3. Env var overrides the device-derived default.
+        captured.clear()
+        monkeypatch.setattr("onnxruntime.get_available_providers", lambda: cpu_only)
         monkeypatch.setenv("MARVIN_RERANK_MODEL_FILE", "onnx/model_fp16.onnx")
         FastEmbedRerankerBackend(model_name=DEFAULT_RERANK_MODEL)
         assert captured["model_file"] == "onnx/model_fp16.onnx"
