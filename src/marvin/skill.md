@@ -37,9 +37,11 @@ Before beginning a multi-step refactor or an exploratory feature build:
 During the session, autonomously invoke these tools when their trigger conditions are met:
 
 *   **Trigger: User states a preference or architectural fact.** (e.g., "We only use Tailwind", "My API key is X")
-    *   **Action:** Call `marvin_remember_semantic(concept="...", content="...", links=[...])`.
+    *   **Action:** Call `marvin_remember_semantic(concept="...", predicate="...", value="...", aspect="preference|decision|knowledge", links=[...])`. Use `content="..."` only when the fact does not have an obvious predicate.
 *   **Trigger: User provides a strict instruction or workflow.** (e.g., "Always run pytest before committing", "Never use classes in React")
     *   **Action:** Call `marvin_store_procedure(title="...", steps=[...])`.
+*   **Trigger: You develop a reusable response strategy for a recurring kind of request.** (e.g., a debugging playbook, a code-review checklist)
+    *   **Action:** Call `marvin_register_template(title="...", plan=[...], intents=[...], trigger_phrases=[...])`. After applying a template, record whether it helped via `marvin_record_template_use(title="...", success=true)` so effective strategies rank higher next time.
 *   **Trigger: You successfully resolve a bug or complete a feature.**
     *   **Action:** Call `marvin_log_episode(title="...", summary="...", details="...")`. Describe what the problem was and exactly how you fixed it.
 

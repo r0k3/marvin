@@ -29,17 +29,19 @@ Because Marvin's vault is natively backed by **Git**, agents can check out isola
 ### 3. Asynchronous Consolidation (Computational Sleep)
 Biological memory isn't just stored; it is *consolidated* while we sleep. 
 
-Marvin utilizes a Dockerized architecture with a **NATS** message broker and a background **Brain Worker**. We chose NATS because it is exceptionally lightweight, simple to deploy, and highly extensible. While your agent rapidly logs noisy, raw "Episodic" events, the Brain Worker asynchronously uses local NLP (`langextract`) to map entities, and a local LLM (`qwen3.5:9b`) to distill those noisy logs into permanent "Semantic" facts and "Procedural" rules overnight without blocking your workflow.
+Marvin utilizes a Dockerized architecture with a **NATS** message broker and a background **Brain Worker**. We chose NATS because it is exceptionally lightweight, simple to deploy, and highly extensible. While your agent rapidly logs noisy, raw "Episodic" events, the Brain Worker asynchronously uses local NLP (`langextract`) to map entities, and a local LLM (default `qwen3.6:35b-a3b-q4_K_M` via Ollama) to consolidate memory in two phases: entity-scoped **Semantic** facts extracted from episodes, then cross-fact **Reflective** insights synthesized per aspect — overnight, without blocking your workflow.
 
 ---
 
 ## Features
 
 - **Obsidian-Native Vault:** Memories are categorized into `Semantic`, `Procedural`, `Episodic`, and `Reflective` markdown folders.
+- **Structured Semantic Facts:** Facts carry a predicate, value, aspect, and confidence; updating a fact soft-deprecates the old value (auditable, never silently overwritten, excluded from retrieval).
+- **K-Line Procedural Templates:** Response strategies with trigger conditions (intents, styles, entity types, keywords), selected by weighted partial-match scoring and ranked by an adaptive effectiveness score.
 - **Deep Semantic Graphing:** Zero-shot entity extraction automatically injects `[[Wikilinks]]` into text, connecting concepts without the agent having to do it manually.
-- **Computational Sleep:** Asynchronous background consolidation using local open-weight models (`qwen3.5:9b`).
-- **Hybrid Retrieval:** Blazingly fast embedded vector search (`sqlite-vec`) combined with full-text keyword search (FTS5) using Reciprocal Rank Fusion.
-- **MCP Native:** Exposes powerful tools directly over the standard Model Context Protocol (SSE or Stdio).
+- **Computational Sleep:** Asynchronous two-phase consolidation (episodic → semantic facts, semantic → reflective insights) using local open-weight models.
+- **Hybrid Retrieval:** Embedded vector search (`sqlite-vec`) + full-text keyword search (FTS5) + an entity-graph stream, fused with Reciprocal Rank Fusion; optional cross-encoder reranking. 99.6% `recall_any@5` on LongMemEval-S.
+- **MCP Native:** 15 tools over the standard Model Context Protocol (SSE or stdio).
 
 ---
 
