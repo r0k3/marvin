@@ -108,6 +108,12 @@ def build_auto_name(args: argparse.Namespace) -> str:
     if getattr(args, "decay", False):
         parts.append("decay")
 
+    if getattr(args, "qa", False):
+        parts.append("qa")
+        reader_model = getattr(args, "reader_model", None)
+        if reader_model:
+            parts.append(_slug(reader_model))
+
     return "-".join(parts)
 
 
