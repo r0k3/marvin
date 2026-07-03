@@ -112,9 +112,31 @@ uv tool install git+https://github.com/r0k3/marvin
 You immediately have the AXI command line:
 
 ```bash
-marvin                                   # live vault dashboard
 marvin remember "DB" --predicate storage --value "PostgreSQL with asyncpg"
 marvin search "postgres"                 # TOON output: hits[1]{title,kind,path}: ...
+marvin skill install                     # teach your agent when to use all this
+```
+
+Bare `marvin` is a live dashboard, not help text — token-efficient TOON your agent (or you) can read at a glance:
+
+```text
+$ marvin
+vault:
+  path: ~/.marvin_vault
+  notes: 42
+  episodic: 17
+  semantic: 18
+  procedural: 4
+  reflective: 3
+  unconsolidated_episodes: 5
+  indexed: 42
+recent[3]{title,kind,path}:
+  Fixed race in worker,episodic,Episodic/Fixed race in worker.md
+  ...
+help[4]:
+  marvin search <query>   # hybrid recall across all four memory types
+  marvin consolidate      # distill 5 unconsolidated episodes
+  ...
 ```
 
 And the MCP server for your agent:
@@ -221,7 +243,13 @@ Runs annotated four-memory retrieval over the bundled *A Midsummer Night's Dream
 
 ## Documentation
 
-Full documentation — architecture deep-dives, getting started, agent skills, evaluation methodology, and case studies — is at **[r0k3.github.io/marvin](https://r0k3.github.io/marvin/)**.
+Full documentation is at **[r0k3.github.io/marvin](https://r0k3.github.io/marvin/)**:
+
+- [Getting started](https://r0k3.github.io/marvin/guide/getting-started/) — install, Docker cluster, agent configs
+- [MCP tools reference](https://r0k3.github.io/marvin/reference/mcp-tools/) — all 20 tools
+- [CLI reference (AXI)](https://r0k3.github.io/marvin/reference/cli/) — every command, TOON format, exit codes, session-hook pattern
+- [The agent skill](https://r0k3.github.io/marvin/guide/skills/) — what `marvin-memory` teaches and the test-first evidence behind it
+- [Architecture](https://r0k3.github.io/marvin/architecture/) and [evaluation methodology](https://r0k3.github.io/marvin/guide/evaluation/)
 
 ## Contributing
 

@@ -54,4 +54,4 @@ If you are ready to give your agent a serious memory upgrade, head over to the [
 
 ---
 
-**Quick links:** [GitHub Repository](https://github.com/r0k3/marvin) | [Quick Start & Agent Config](https://github.com/r0k3/marvin#quick-start) | [Research Paper (SSRN)](https://papers.ssrn.com/sol3/papers.cfm?abstract_id=6234218)
+**Quick links:** [GitHub Repository](https://github.com/r0k3/marvin) | [Quick Start & Agent Config](https://github.com/r0k3/marvin#quick-start) | [MCP Tools (20)](reference/mcp-tools.md) | [CLI Reference (AXI)](reference/cli.md) | [Agent Skill](guide/skills.md) | [Research Paper (SSRN)](https://papers.ssrn.com/sol3/papers.cfm?abstract_id=6234218)
