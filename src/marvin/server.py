@@ -11,8 +11,10 @@ from mcp.server.fastmcp import FastMCP
 
 from .broker import MarvinBroker
 from .config import MarvinSettings
+from .consolidation import ConsolidationEngine
 from .git import GitManager
 from .models import (
+    ConsistencyReport,
     MemoryKind,
     MemoryWriteResult,
     SearchHit,
@@ -268,6 +270,95 @@ def create_app(settings: MarvinSettings) -> FastMCP:
         await broker.publish("memory.sleep", {"trigger": "agent"})
         return "Consolidation requested. The brain worker is now processing."
 
+    @app.tool(
+        description=(
+            "Select the best-matching K-line templates for the current context via"
+            " weighted trigger scoring (intent is a hard gate; ties break by"
+            " effectiveness). Returns each template's plan so it can be applied."
+        )
+    )
+    def marvin_match_template(
+        context: str = "",
+        intent: str = "",
+        styles: list[str] | None = None,
+        entity_types: list[str] | None = None,
+        top_k: int = 5,
+    ) -> list[dict[str, Any]]:
+        matches = service.match_template(
+            context,
+            intent=intent,
+            styles=styles or (),
+            entity_types=entity_types or (),
+            top_k=top_k,
+        )
+        return [
+            {
+                "title": m.template.title,
+                "score": m.score,
+                "plan": list(m.template.plan),
+                "slots": list(m.template.slots),
+                "failure_modes": list(m.template.failure_modes),
+                "matched_phrases": list(m.matched_phrases),
+                "path": m.note_path,
+                "usage_count": m.usage_count,
+                "effectiveness": m.effectiveness,
+            }
+            for m in matches
+        ]
+
+    @app.tool(
+        description=(
+            "Run the two-phase consolidation synchronously (episodic -> semantic"
+            " facts, then semantic -> reflective insights) without requiring the"
+            " background worker. Uses the local LLM unless a model is given."
+        )
+    )
+    def marvin_consolidate(
+        model: str | None = None,
+        api_base: str | None = None,
+    ) -> dict[str, Any]:
+        engine_kwargs: dict[str, str] = {}
+        if model:
+            engine_kwargs["model"] = model
+        if api_base:
+            engine_kwargs["api_base"] = api_base
+        engine = ConsolidationEngine(**engine_kwargs)
+        facts = service.consolidate_semantic(engine=engine)
+        insights = service.consolidate_reflective(engine=engine)
+        return {
+            "facts_extracted": len(facts),
+            "insights_created": len(insights),
+            "facts": [f.model_dump(mode="json") for f in facts],
+            "insights": [i.model_dump(mode="json") for i in insights],
+        }
+
+    @app.tool(
+        description=(
+            "Rebuild every derived index from the authoritative Markdown vault"
+            " (recovers from index corruption or schema changes)."
+        )
+    )
+    def marvin_rebuild() -> SyncReport:
+        return service.rebuild()
+
+    @app.tool(
+        description=(
+            "Check agreement between the authoritative vault and the derived index:"
+            " reports notes missing from the index and orphaned index rows."
+        )
+    )
+    def marvin_consistency_check() -> ConsistencyReport:
+        return service.consistency_check()
+
+    @app.tool(
+        description=(
+            "Runtime health snapshot: vault/index paths, embedding and reranker"
+            " backends, GPU state, and retrieval settings."
+        )
+    )
+    def marvin_health() -> dict[str, Any]:
+        return service.health()
+
     return app
 
 
@@ -320,9 +411,9 @@ def make_arg_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
     parser = make_arg_parser()
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     settings = build_settings_from_args(args)
     asyncio.run(run_server(settings))
 
