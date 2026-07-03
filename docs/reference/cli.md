@@ -50,7 +50,9 @@ help[4]:
 The dashboard reads only the vault and the existing index — it never loads
 an embedding model and never calls an LLM, so it is cheap enough to run as
 **ambient context**: hook it into your agent's session start so the state of
-memory is on screen before the first action. For Claude Code:
+memory is on screen before the first action. Pair it with the bundled
+[agent skill](../guide/skills.md) (`marvin skill install`), which teaches the
+agent *when* to act on what the dashboard shows. For Claude Code:
 
 ```json
 {
@@ -83,6 +85,8 @@ memory is on screen before the first action. For Claude Code:
 | `marvin health` | Runtime snapshot: backends, GPU, paths |
 | `marvin consolidate [--model m] [--api-base u]` | Two-phase consolidation now, synchronously (episodic → semantic → reflective) |
 | `marvin worktree start <branch>` / `marvin worktree merge <branch>` | Branch memory for risky work |
+| `marvin skill show` | Print the bundled `marvin-memory` agent skill (paste into any harness) |
+| `marvin skill install [--user\|--target <dir>]` | Install the skill into a skills directory (default: `./.claude/skills`) |
 | `marvin serve [--transport stdio\|sse\|http] [--host] [--port]` | Run the MCP server (everything after `serve` is forwarded) |
 
 Every subcommand answers `--help` concisely.

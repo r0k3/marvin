@@ -13,9 +13,9 @@ Marvin is designed to bridge the gap between an LLM agent's ephemeral context wi
 
 Marvin V2 operates as a suite of lightweight services orchestrated via Docker Compose.
 
-### 1. The MCP Gateway (`server.py` & `service.py`)
-*   **Role:** The front-facing edge that integrates with the client agent (e.g., Goose, Cursor) using the Model Context Protocol (MCP).
-*   **Transport:** Exposes endpoints via SSE (Server-Sent Events) over HTTP, with a fallback to `stdio` for basic CLI runners.
+### 1. The MCP Gateway & AXI CLI (`server.py`, `cli.py` & `service.py`)
+*   **Role:** The front-facing edges that integrate with the client agent. The MCP gateway exposes the full service surface as **20 tools** over the Model Context Protocol; the **AXI CLI** (`marvin`) exposes the same service to shell-driving agents and humans, with token-efficient TOON output and a live dashboard on bare invocation.
+*   **Transport:** MCP via SSE (Server-Sent Events) over HTTP or `stdio` (`marvin serve`); the CLI runs directly against the local vault.
 *   **Data Flow:** Receives memory write/search requests. Writes raw Markdown to the Vault. Queries the `sqlite-vec` index for fast retrieval. Publishes asynchronous events to the Message Broker.
 
 ### 2. The Hybrid Index (`index.py`, `embeddings.py` & `reranker.py`)
