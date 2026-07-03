@@ -47,8 +47,12 @@ eval-qa:
 docs:
     uv run mkdocs serve
 
-# ---- server ----
+# ---- server & CLI ----
 
 # Run the Marvin MCP server.
 serve:
+    uv run marvin serve
+
+# Live vault dashboard (AXI CLI).
+dashboard:
     uv run marvin

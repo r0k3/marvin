@@ -41,7 +41,8 @@ Marvin utilizes a Dockerized architecture with a **NATS** message broker and a b
 - **Deep Semantic Graphing:** Zero-shot entity extraction automatically injects `[[Wikilinks]]` into text, connecting concepts without the agent having to do it manually.
 - **Computational Sleep:** Asynchronous two-phase consolidation (episodic → semantic facts, semantic → reflective insights) using local open-weight models.
 - **Hybrid Retrieval:** Embedded vector search (`sqlite-vec`) + full-text keyword search (FTS5) + an entity-graph stream, fused with Reciprocal Rank Fusion; optional cross-encoder reranking. 99.6% `recall_any@5` on LongMemEval-S.
-- **MCP Native:** 15 tools over the standard Model Context Protocol (SSE or stdio).
+- **MCP Native:** 20 tools — the full service surface — over the standard Model Context Protocol (SSE or stdio).
+- **AXI CLI:** the same functionality as an [axi.md](https://axi.md/)-style command line with token-efficient TOON output, a live dashboard, and `help[]` next-step hints — built for agents driving a shell.
 
 ---
 
