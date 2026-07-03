@@ -67,3 +67,4 @@ nav:
       - Evaluation: guide/evaluation.md
   - Reference:
       - MCP Tools: reference/mcp-tools.md
+      - CLI (AXI): reference/cli.md

@@ -19,6 +19,7 @@ If your AI agent supports configuring MCP servers via standard I/O streams:
     "marvin": {
       "command": "marvin",
       "args": [
+        "serve",
         "--vault-path",
         "~/.marvin_vault",
         "--transport",
@@ -28,6 +29,10 @@ If your AI agent supports configuring MCP servers via standard I/O streams:
   }
 }
 ```
+
+Installing also gives you the [AXI command line](../reference/cli.md): run
+`marvin` with no arguments for a live vault dashboard, `marvin search <query>`
+for token-efficient recall, and `marvin --help` for the full command list.
 
 ## Running the Advanced Cluster (Docker)
 

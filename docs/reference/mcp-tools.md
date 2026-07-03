@@ -1,6 +1,8 @@
 # MCP Tools Reference
 
-Marvin exposes 15 tools to Model Context Protocol (MCP) clients.
+Marvin exposes 20 tools to Model Context Protocol (MCP) clients — the full
+service surface. (The same functionality is available on the command line;
+see the [CLI reference](cli.md).)
 
 ## Session Lifecycle
 
@@ -72,6 +74,16 @@ in future matches.
 **Arguments:**
 * `title` (str), `success` (bool)
 
+### `marvin_match_template`
+Selects the best-matching K-line templates for the current context via
+weighted trigger scoring (intent 0.5 as a hard gate, style 0.25, entity type
+0.25, plus a capped keyword bonus; ties break by effectiveness). Returns each
+template's plan, slots, and failure modes so the strategy can be applied.
+**Arguments:**
+* `context` (str, optional): Free text to match trigger phrases against.
+* `intent`, `styles`, `entity_types` (optional): Trigger dimensions.
+* `top_k` (int, optional): Defaults to 5.
+
 ### `marvin_log_episode`
 Log a completed task, fixed bug, or event.
 **Arguments:**
@@ -106,6 +118,30 @@ includes the note's structured facts alongside tags, links, and the body.
 ### `marvin_sync`
 Syncs the Obsidian vault into Marvin's local hybrid index (picks up notes
 added or edited outside the MCP tools, e.g. by hand in Obsidian).
+
+## Maintenance & Introspection
+
+### `marvin_consolidate`
+Runs the two-phase consolidation **synchronously** — episodic → semantic
+fact extraction (per-entity threshold, dedup), then semantic → reflective
+synthesis — without requiring the NATS worker. Returns counts plus the
+written notes. Use `marvin_trigger_sleep` instead when the background
+cluster is running.
+**Arguments:**
+* `model` (str, optional): LiteLLM model id override.
+* `api_base` (str, optional): e.g. a local ollama endpoint.
+
+### `marvin_rebuild`
+Rebuilds every derived index from the authoritative Markdown vault —
+recovery from index corruption or schema changes.
+
+### `marvin_consistency_check`
+Compares the authoritative vault against the derived index: reports notes
+missing from the index and orphaned index rows.
+
+### `marvin_health`
+Runtime snapshot: vault/index paths, embedding and reranker backends
+(honest about lazy loading), GPU state, and retrieval settings.
 
 ## Advanced Git Worktrees
 

@@ -48,7 +48,8 @@ Biological memory is *consolidated* during sleep. Marvin's background **Brain Wo
 - **Deep Semantic Graphing** — zero-shot entity extraction with automatic `[[Wikilink]]` injection; the wikilink graph feeds retrieval.
 - **Computational Sleep** — two-phase background consolidation using local open-weight models (default `qwen3.6:35b-a3b-q4_K_M` via Ollama).
 - **Hybrid Retrieval** — three-stream Reciprocal Rank Fusion (SQLite FTS5 + `sqlite-vec` dense vectors + IDF-weighted entity graph), optional `bge-reranker-v2-m3` cross-encoder (int8 on CPU, fp16 on GPU), and opt-in time-aware freshness decay.
-- **MCP Gateway** — 15 tools over SSE (port 8421) or stdio; plugs into any MCP-compatible agent.
+- **MCP Gateway** — 20 tools (the full service surface) over SSE (port 8421) or stdio; plugs into any MCP-compatible agent.
+- **AXI CLI** — the same functionality as an [axi.md](https://axi.md/)-style command line: token-efficient TOON output, a live dashboard on bare `marvin`, `help[]` next-step hints, structured errors. Built for agents driving a shell, pleasant for humans.
 - **Reproducible Benchmark** — built-in LongMemEval-S harness for retrieval *and* end-to-end QA, so memory changes are measured, not vibed.
 
 ## Benchmarks
@@ -70,7 +71,7 @@ Marvin runs as four lightweight services orchestrated by Docker Compose:
 
 | Service | Role |
 |---|---|
-| **MCP Gateway** | FastMCP server exposing 15 tools via SSE on port `8421`. The low-latency edge your agent talks to. |
+| **MCP Gateway** | FastMCP server exposing 20 tools via SSE on port `8421`. The low-latency edge your agent talks to. |
 | **NATS** | High-performance message broker with JetStream. Streams `memory.created` and `memory.sleep` events. |
 | **Brain Worker** | Background daemon subscribing to NATS. Runs entity extraction (langextract) and two-phase sleep consolidation. |
 | **Ollama** | Bundled local LLM container. Cost-free inference for the Brain Worker's consolidation phases. |
@@ -102,24 +103,34 @@ More detail in [ARCHITECTURE.md](ARCHITECTURE.md) and the [docs site](https://r0
 
 ## Quick Start
 
-### Lightweight (MCP gateway only, stdio)
+### Lightweight (CLI + MCP over stdio)
 
 ```bash
 uv tool install git+https://github.com/r0k3/marvin
 ```
+
+You immediately have the AXI command line:
+
+```bash
+marvin                                   # live vault dashboard
+marvin remember "DB" --predicate storage --value "PostgreSQL with asyncpg"
+marvin search "postgres"                 # TOON output: hits[1]{title,kind,path}: ...
+```
+
+And the MCP server for your agent:
 
 ```json
 {
   "mcpServers": {
     "marvin": {
       "command": "marvin",
-      "args": ["--vault-path", "~/.marvin_vault", "--transport", "stdio"]
+      "args": ["serve", "--vault-path", "~/.marvin_vault", "--transport", "stdio"]
     }
   }
 }
 ```
 
-This gives you the vault, hybrid retrieval, and all 15 tools — without the background worker.
+This gives you the vault, hybrid retrieval, and all 20 tools — without the background worker.
 
 ### Full cluster (Docker, with the Brain Worker)
 
