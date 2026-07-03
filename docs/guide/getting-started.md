@@ -55,8 +55,17 @@ To utilize the **Background Brain Worker** (for automatic consolidation and deep
    docker exec -it marvin-ollama-1 ollama pull qwen3.6:35b-a3b-q4_K_M
    ```
 
-4. Load the **Marvin Skill**. 
-   Marvin works best when your agent knows *when* to use it. Copy the contents of [`src/marvin/skill.md`](https://github.com/r0k3/marvin/blob/main/src/marvin/skill.md) into your agent's custom system prompt or instructions field. This teaches the agent the K-Lines philosophy and instructs it to autonomously trigger sleep cycles and log episodes.
+4. Install the **Marvin Skill**.
+   Marvin works best when your agent knows *when* to use it. The bundled
+   `marvin-memory` skill teaches exactly that — storage signals per memory
+   type, recall-before-answering, the template feedback loop, and session
+   lifecycle:
+   ```bash
+   marvin skill install          # Claude Code, project-level (.claude/skills/)
+   marvin skill install --user   # user-level (~/.claude/skills/)
+   marvin skill show             # print it, to paste into any other harness
+   ```
+   See the [Agent Skills guide](skills.md) for what it teaches and why.
 
 ## Configuring Your Agent (MCP Clients)
 
