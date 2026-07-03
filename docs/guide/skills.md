@@ -1,51 +1,61 @@
-# Marvin Skill: Agentic Memory Usage
+# The Agent Skill
 
-<skill_description>
-Provides instructions for the agent on how to proactively use the Marvin MCP memory system to store and retrieve long-term knowledge, rules, and episodic logs across sessions. It instructs the agent on how to manage state, leverage git worktrees, and utilize "computational sleep" for optimal memory curation.
-</skill_description>
+Marvin ships with a first-class agent skill, **`marvin-memory`**, in the
+standard `SKILL.md` format (YAML frontmatter + instructions) that Claude Code
+and other skill-aware harnesses load natively. It teaches an agent *when* to
+use memory without being told — turning Marvin from a set of tools into a
+habit.
 
-## 1. Core Philosophy: Do not be Passive
+## Install
 
-You have a durable, long-term memory system called **Marvin**. You must use your memory tools **proactively and autonomously**. Do not wait for the user to explicitly say "remember this" or "save this." Treat memory management as a critical background thread of your operation.
+```bash
+marvin skill install          # project-level → ./.claude/skills/marvin-memory
+marvin skill install --user   # user-level    → ~/.claude/skills/marvin-memory
+marvin skill install --target <dir>   # any skills directory
+marvin skill show             # print SKILL.md — paste into any other harness
+```
 
-*   **Search before guessing:** If you are unsure of a project convention, search memory first using `marvin_search`.
-*   **Log major actions:** If you complete a complex task, log it.
-*   **Isolate risky actions:** If you are about to rewrite multiple files, branch your memory first.
+The skill is bundled inside the package
+([source](https://github.com/r0k3/marvin/blob/main/src/marvin/skill/SKILL.md)),
+so `install` works offline from any Marvin installation. It covers **both
+surfaces**: the `marvin_*` MCP tools and the AXI CLI — whichever your agent
+has, the same guidance applies.
 
-### Translating User Intent
-The user does not understand the nuances of your memory taxonomy (Semantic vs Procedural vs Episodic). They will simply say "remember this" or "what do you know about X?".
-*   **When asked to "remember":** You must analyze the information. Is it a permanent fact? Use `marvin_remember_semantic`. Is it a rule you must follow? Use `marvin_store_procedure`. If it's a conversation or action that just happened, use `marvin_log_episode`.
-*   **When asked "what do you know":** Use `marvin_search` which searches across all memory types via hybrid Reciprocal Rank Fusion.
+## What it teaches (and why)
 
-### Override Basic Harness Memory
-If your specific agent platform (e.g., Goose, Cursor, OpenCode) has its own basic memory commands (like "Top of Mind", generic text logs, or `chatrecall`), **ignore them for permanent knowledge**. You must always prefer Marvin's tools for project-level facts, rules, and history to ensure they are graph-linked and durable across entirely different sessions and platforms.
+The skill was built test-first: we ran pressure scenarios with capable agents
+that had full access to Marvin but **no instructions**, recorded what they
+got wrong, and wrote the skill against those observed failures.
 
-## 2. The Operational Workflow
+What baseline agents already did well (the CLI's own affordances carry a lot):
+choosing sensible memory types, skipping ephemera, even updating a corrected
+fact through the same concept + predicate so it soft-deprecated cleanly.
 
-Follow this strict lifecycle during your sessions:
+What they reliably missed — and what the skill therefore drills:
 
-### A. Session Initialization
-Whenever you begin a new conversation or start working on a major new task:
-1.  **Context Loading:** Call `marvin_prepare_session(task="<your current task>")`. This will instantly retrieve relevant architectural facts, procedural rules, and recent episodes, keeping you grounded.
+1. **Closing the feedback loop.** After the user confirmed a strategy worked
+   ("that worked great, we found it"), no baseline agent recorded the outcome
+   — the K-line template's effectiveness stayed frozen at zero forever. The
+   skill makes outcome-recording an explicit trigger:
+   `marvin_record_template_use` / `marvin template used <title> [--failure]`.
+2. **Selecting strategies through the matcher.** Baselines read procedural
+   notes directly instead of calling `marvin_match_template` — which means
+   effectiveness-based ranking never gets a chance to work.
+3. **Confidence calibration.** A categorical "no exceptions" directive was
+   stored at the default confidence (0.6). The skill sets the rule:
+   categorical ⇒ 0.9+, hedged ⇒ 0.5–0.6.
+4. **Reflections alongside episodes.** War stories were logged as episodes,
+   but the transferable lesson inside them (the root cause, the gotcha) was
+   never lifted into reflective memory.
 
-### B. Risky or Complex Tasks (Agentic Worktrees)
-Before beginning a multi-step refactor or an exploratory feature build:
-1.  **Branch Memory:** Call `marvin_start_worktree(branch_name="feature/<name>")`. This prevents your speculative memories and errors from polluting the primary knowledge base if the task fails.
-2.  **Upon Success:** Only when the user is satisfied and the task is complete, call `marvin_merge_worktree(branch_name="feature/<name>")`.
+Plus the foundations: a signal → memory-type table, recall-before-answering,
+the session lifecycle (`prepare` / `finalize` / consolidate), memory
+worktrees for risky work, and a short do-not-store list (ephemera, secrets,
+anything the code or git history already records).
 
-### C. Active Learning & Logging
-During the session, autonomously invoke these tools when their trigger conditions are met:
+## Ambient context (pairs well)
 
-*   **Trigger: User states a preference or architectural fact.** (e.g., "We only use Tailwind", "My API key is X")
-    *   **Action:** Call `marvin_remember_semantic(concept="...", predicate="...", value="...", aspect="preference|decision|knowledge", links=[...])`. Use `content="..."` only when the fact does not have an obvious predicate.
-*   **Trigger: User provides a strict instruction or workflow.** (e.g., "Always run pytest before committing", "Never use classes in React")
-    *   **Action:** Call `marvin_store_procedure(title="...", steps=[...])`.
-*   **Trigger: You develop a reusable response strategy for a recurring kind of request.** (e.g., a debugging playbook, a code-review checklist)
-    *   **Action:** Call `marvin_register_template(title="...", plan=[...], intents=[...], trigger_phrases=[...])`. After applying a template, record whether it helped via `marvin_record_template_use(title="...", success=true)` so effective strategies rank higher next time.
-*   **Trigger: You successfully resolve a bug or complete a feature.**
-    *   **Action:** Call `marvin_log_episode(title="...", summary="...", details="...")`. Describe what the problem was and exactly how you fixed it.
-
-### D. Session Finalization & Computational Sleep
-When a session is coming to an end, or you have completed a massive unit of work:
-1.  **Extract & Consolidate:** Call `marvin_finalize_session(...)` to log your final episode while simultaneously extracting the most important semantics, procedures, and reflections you learned.
-2.  **Trigger Sleep:** If your session was long and generated many raw, noisy episodic logs, call `marvin_trigger_sleep()`. This activates Marvin's background LLM to automatically deduce permanent rules from your recent chaos, optimizing your memory for tomorrow.
+The skill tells the agent *when* to act; the CLI dashboard tells it *what
+state memory is in*. Wiring bare `marvin` as a session-start hook gives the
+agent both (see the [CLI reference](../reference/cli.md) for the hook
+snippet).

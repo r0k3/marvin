@@ -201,9 +201,15 @@ Add to your MCP config:
 
 ## The Agent Skill
 
-For best results, load the **Marvin Skill** into your agent's system prompt. It teaches the agent to proactively use memory — searching before acting, logging episodes, registering response templates, branching for risky tasks, and triggering sleep consolidation.
+Marvin ships with a first-class **agent skill** (`marvin-memory`) that teaches the agent *when* to use memory without being told: which signals to store (and as which memory type), recall-before-answering, closing the template feedback loop after "that worked", session lifecycle, and what never to store. It covers both surfaces — the `marvin_*` MCP tools and the CLI — and was pressure-tested against baseline agent behavior.
 
-The skill is at [`src/marvin/skill.md`](src/marvin/skill.md). In Goose, add it as a skill file. In other agents, paste its contents into your system prompt or custom instructions.
+```bash
+marvin skill install          # → ./.claude/skills/marvin-memory (Claude Code, project)
+marvin skill install --user   # → ~/.claude/skills/marvin-memory
+marvin skill show             # print SKILL.md to paste into any other harness
+```
+
+Source: [`src/marvin/skill/SKILL.md`](src/marvin/skill/SKILL.md).
 
 ## Try the demo
 

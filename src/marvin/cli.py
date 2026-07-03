@@ -513,6 +513,40 @@ def cmd_consolidate(service: MarvinService, args: argparse.Namespace) -> int:
     return 0
 
 
+def _packaged_skill_dir() -> Path:
+    from importlib.resources import files
+
+    return Path(str(files("marvin") / "skill"))
+
+
+def cmd_skill_show(service: MarvinService | None, args: argparse.Namespace) -> int:
+    print((_packaged_skill_dir() / "SKILL.md").read_text(encoding="utf-8"))
+    return 0
+
+
+def cmd_skill_install(service: MarvinService | None, args: argparse.Namespace) -> int:
+    import shutil
+
+    if args.target:
+        base = Path(args.target).expanduser()
+    elif args.user:
+        base = Path.home() / ".claude" / "skills"
+    else:
+        base = Path.cwd() / ".claude" / "skills"
+    dest = base / "marvin-memory"
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copytree(_packaged_skill_dir(), dest, dirs_exist_ok=True)
+    _print(
+        encode_kv("installed", {"skill": "marvin-memory", "path": str(dest)}),
+        encode_help(
+            [
+                ("marvin skill show", "print the skill for pasting into other harnesses"),
+            ]
+        ),
+    )
+    return 0
+
+
 def cmd_worktree_start(service: MarvinService, args: argparse.Namespace) -> int:
     from .git import GitManager
 
@@ -671,6 +705,19 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--min-facts", type=int, default=3, dest="min_facts")
     p.set_defaults(func=cmd_consolidate)
 
+    sk = sub.add_parser("skill", help="The bundled agent skill: show / install")
+    sk_sub = sk.add_subparsers(dest="skill_command", required=True)
+    p = sk_sub.add_parser("show", help="Print SKILL.md (paste into any harness)")
+    p.set_defaults(func=cmd_skill_show, needs_service=False)
+    p = sk_sub.add_parser("install", help="Copy the skill into a skills directory")
+    p.add_argument(
+        "--user",
+        action="store_true",
+        help="install to ~/.claude/skills (default: ./.claude/skills)",
+    )
+    p.add_argument("--target", help="explicit skills directory")
+    p.set_defaults(func=cmd_skill_install, needs_service=False)
+
     wt = sub.add_parser("worktree", help="Branch memory for risky work: start / merge")
     wt_sub = wt.add_subparsers(dest="worktree_command", required=True)
     p = wt_sub.add_parser("start", help="Create an isolated memory branch")
@@ -719,6 +766,15 @@ def main(argv: list[str] | None = None) -> int:
 
     parser = build_parser()
     args = parser.parse_args(argv)
+
+    # Commands like `skill show|install` never touch the vault; don't create
+    # a service (which would create vault directories) for them.
+    if not getattr(args, "needs_service", True):
+        try:
+            return args.func(None, args)
+        except Exception as exc:
+            print(encode_error("runtime", f"{type(exc).__name__}: {exc}"))
+            return 1
 
     settings = _build_settings(args)
     service = MarvinService(settings)
