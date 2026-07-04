@@ -6,7 +6,7 @@
 
 **Marvin** is an active, Obsidian-native, Git-backed memory cluster designed for professional AI agents.
 
-Named in homage to **Marvin Minsky** and his foundational book [*The Society of Mind*](https://amzn.to/3PuFQ3K), this project transforms the concept of ephemeral LLM context windows into a durable, topologically connected knowledge base. It is a practical implementation of the cognitive architectures detailed in the research paper [*K-Lines: A Framework for LLM Agent Memory*](https://papers.ssrn.com/sol3/papers.cfm?abstract_id=6234218) (and its [companion repository](https://github.com/r0k3/k-lines)).
+Named in homage to **Marvin Minsky** and his foundational book [*The Society of Mind*](https://amzn.to/3PuFQ3K), this project transforms the concept of ephemeral LLM context windows into a durable, topologically connected knowledge base. It is a practical implementation of the cognitive architectures detailed in the research paper [*K-Lines: A Cognitively-Grounded Four-Memory Architecture for Persistent Conversational AI*](https://ssrn.com/abstract=6234218) (and its [companion repository](https://github.com/r0k3/k-lines)).
 
 ---
 
@@ -54,4 +54,4 @@ If you are ready to give your agent a serious memory upgrade, head over to the [
 
 ---
 
-**Quick links:** [GitHub Repository](https://github.com/r0k3/marvin) | [Quick Start & Agent Config](https://github.com/r0k3/marvin#quick-start) | [MCP Tools (20)](reference/mcp-tools.md) | [CLI Reference (AXI)](reference/cli.md) | [Agent Skill](guide/skills.md) | [Research Paper (SSRN)](https://papers.ssrn.com/sol3/papers.cfm?abstract_id=6234218)
+**Quick links:** [GitHub Repository](https://github.com/r0k3/marvin) | [Quick Start & Agent Config](https://github.com/r0k3/marvin#quick-start) | [MCP Tools (20)](reference/mcp-tools.md) | [CLI Reference (AXI)](reference/cli.md) | [Agent Skill](guide/skills.md) | [Research Paper (SSRN)](https://ssrn.com/abstract=6234218)
