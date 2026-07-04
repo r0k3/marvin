@@ -1,0 +1,1602 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="An Obsidian-native, Git-backed active memory cluster for AI agents.">
+      
+      
+      
+        <link rel="canonical" href="https://r0k3.github.io/marvin/reference/mcp-tools/">
+      
+      
+        <link rel="prev" href="../../guide/evaluation/">
+      
+      
+        <link rel="next" href="../cli/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/logo.svg">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>MCP Tools - Marvin</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="slate" data-md-color-primary="deep-purple" data-md-color-accent="deep-orange">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#mcp-tools-reference" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="Marvin" class="md-header__button md-logo" aria-label="Marvin" data-md-component="logo">
+      
+  <img src="../../assets/logo.svg" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Marvin
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              MCP Tools
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="deep-purple" data-md-color-accent="deep-orange"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="deep-purple" data-md-color-accent="deep-orange"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/r0k3/marvin" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    r0k3/marvin
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../.." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../architecture/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Architecture
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../guide/getting-started/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Guide
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="./" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Reference
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="Marvin" class="md-nav__button md-logo" aria-label="Marvin" data-md-component="logo">
+      
+  <img src="../../assets/logo.svg" alt="logo">
+
+    </a>
+    Marvin
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/r0k3/marvin" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    r0k3/marvin
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Guide
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Guide
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/getting-started/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting Started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/skills/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Agent Skills
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/case-study/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Case Study
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/evaluation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Evaluation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    MCP Tools
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    MCP Tools
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#session-lifecycle" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Session Lifecycle
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Session Lifecycle">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#marvin_prepare_session" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        marvin_prepare_session
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#marvin_finalize_session" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        marvin_finalize_session
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#marvin_trigger_sleep" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        marvin_trigger_sleep
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#core-storage-tools" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Core Storage Tools
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Core Storage Tools">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#marvin_remember_semantic" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        marvin_remember_semantic
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#marvin_store_procedure" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        marvin_store_procedure
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#marvin_register_template" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        marvin_register_template
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#marvin_record_template_use" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        marvin_record_template_use
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#marvin_match_template" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        marvin_match_template
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#marvin_log_episode" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        marvin_log_episode
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#marvin_reflect" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        marvin_reflect
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#advanced-retrieval" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Advanced Retrieval
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Advanced Retrieval">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#marvin_search" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        marvin_search
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#marvin_recent_activity" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        marvin_recent_activity
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#marvin_read_memory" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        marvin_read_memory
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#marvin_sync" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        marvin_sync
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#maintenance-introspection" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Maintenance &amp; Introspection
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Maintenance &amp; Introspection">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#marvin_consolidate" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        marvin_consolidate
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#marvin_rebuild" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        marvin_rebuild
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#marvin_consistency_check" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        marvin_consistency_check
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#marvin_health" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        marvin_health
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#advanced-git-worktrees" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Advanced Git Worktrees
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Advanced Git Worktrees">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#marvin_start_worktree" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        marvin_start_worktree
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#marvin_merge_worktree" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        marvin_merge_worktree
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CLI (AXI)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#session-lifecycle" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Session Lifecycle
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Session Lifecycle">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#marvin_prepare_session" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        marvin_prepare_session
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#marvin_finalize_session" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        marvin_finalize_session
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#marvin_trigger_sleep" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        marvin_trigger_sleep
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#core-storage-tools" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Core Storage Tools
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Core Storage Tools">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#marvin_remember_semantic" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        marvin_remember_semantic
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#marvin_store_procedure" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        marvin_store_procedure
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#marvin_register_template" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        marvin_register_template
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#marvin_record_template_use" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        marvin_record_template_use
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#marvin_match_template" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        marvin_match_template
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#marvin_log_episode" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        marvin_log_episode
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#marvin_reflect" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        marvin_reflect
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#advanced-retrieval" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Advanced Retrieval
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Advanced Retrieval">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#marvin_search" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        marvin_search
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#marvin_recent_activity" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        marvin_recent_activity
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#marvin_read_memory" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        marvin_read_memory
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#marvin_sync" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        marvin_sync
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#maintenance-introspection" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Maintenance &amp; Introspection
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Maintenance &amp; Introspection">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#marvin_consolidate" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        marvin_consolidate
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#marvin_rebuild" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        marvin_rebuild
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#marvin_consistency_check" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        marvin_consistency_check
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#marvin_health" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        marvin_health
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#advanced-git-worktrees" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Advanced Git Worktrees
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Advanced Git Worktrees">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#marvin_start_worktree" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        marvin_start_worktree
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#marvin_merge_worktree" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        marvin_merge_worktree
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="mcp-tools-reference">MCP Tools Reference</h1>
+<p>Marvin exposes 20 tools to Model Context Protocol (MCP) clients — the full
+service surface. (The same functionality is available on the command line;
+see the <a href="../cli/">CLI reference</a>.)</p>
+<h2 id="session-lifecycle">Session Lifecycle</h2>
+<h3 id="marvin_prepare_session"><code>marvin_prepare_session</code></h3>
+<p>Hook-friendly session bootstrap: pulls relevant procedures, semantic facts,
+reflections, and recent episodes for the task at hand. If a K-line template
+matches the task, its plan is surfaced at the top of the guidance.
+<strong>Arguments:</strong>
+* <code>task</code> (str): What the agent is about to work on.
+* <code>repo_name</code> (str, optional), <code>technologies</code> (list[str], optional): Extra retrieval context.
+* <code>limit</code> (int, optional): Defaults to 8.</p>
+<h3 id="marvin_finalize_session"><code>marvin_finalize_session</code></h3>
+<p>Hook-friendly session finalizer: logs a closing episode and optionally extracts
+semantic facts, procedures, and reflections in the same call.
+<strong>Arguments:</strong>
+* <code>title</code> (str), <code>summary</code> (str), <code>details</code> (str, optional)
+* <code>semantic_facts</code> (list[str], optional), <code>procedures</code> (list[dict], optional), <code>reflections</code> (list[str], optional)
+* <code>tags</code>, <code>links</code> (list[str], optional)</p>
+<h3 id="marvin_trigger_sleep"><code>marvin_trigger_sleep</code></h3>
+<p>Trigger background consolidation ("computational sleep") via the Brain Worker:
+phase 1 extracts entity-scoped semantic facts from unconsolidated episodes,
+phase 2 synthesizes reflective insights across accumulated facts.</p>
+<h2 id="core-storage-tools">Core Storage Tools</h2>
+<h3 id="marvin_remember_semantic"><code>marvin_remember_semantic</code></h3>
+<p>Stores a durable piece of architectural knowledge, user preference, or fact.
+<strong>Arguments:</strong>
+* <code>concept</code> (str): The name of the concept.
+* <code>content</code> (str, optional): Easy path for an unstructured fact.
+* <code>predicate</code> (str, optional): Stable property name for structured facts.
+* <code>value</code> (str, optional): Structured fact value. If omitted, <code>content</code> is used.
+* <code>aspect</code> (str, optional): One of <code>knowledge</code>, <code>preference</code>, <code>decision</code>, <code>goal</code>, <code>problem</code>, <code>belief</code>, or <code>directive</code> (default: <code>knowledge</code>).
+* <code>confidence</code> (float, optional): 0.0–1.0 confidence score (default: 0.6).
+* <code>tags</code> (list[str], optional): e.g. <code>["python", "best-practice"]</code>
+* <code>links</code> (list[str], optional): Links to related concepts.</p>
+<p>Semantic facts are stored with stable IDs in note frontmatter and rendered
+under <code>## Facts</code> for Obsidian/search readability. A new active fact with the
+same <code>concept</code> + <code>predicate</code> and a different value soft-deprecates the older
+fact; deprecated facts remain auditable under <code>## Deprecated Facts</code> but are not
+indexed for retrieval.</p>
+<h3 id="marvin_store_procedure"><code>marvin_store_procedure</code></h3>
+<p>Stores a reusable playbook or strict rule the agent should follow.
+<strong>Arguments:</strong>
+* <code>title</code> (str): Rule name.
+* <code>steps</code> (list[str]): The ordered procedure.
+* <code>applicability</code> (list[str], optional): When this applies.
+* <code>anti_patterns</code> (list[str], optional): Things to strictly avoid.</p>
+<h3 id="marvin_register_template"><code>marvin_register_template</code></h3>
+<p>Registers a <strong>K-line procedural template</strong>: a response strategy with explicit
+trigger conditions and an ordered plan, selectable by <code>marvin_prepare_session</code>
+via weighted partial-match scoring (intent 0.5 as a hard gate, style 0.25,
+entity type 0.25, plus a capped keyword bonus).
+<strong>Arguments:</strong>
+* <code>title</code> (str), <code>plan</code> (list[str]): The strategy and its ordered steps.
+* <code>intents</code>, <code>styles</code>, <code>entity_types</code>, <code>trigger_phrases</code> (list[str], optional): Trigger conditions.
+* <code>slots</code>, <code>failure_modes</code> (list[str], optional): Fill-in parameters and known pitfalls.
+* <code>tags</code> (list[str], optional)</p>
+<h3 id="marvin_record_template_use"><code>marvin_record_template_use</code></h3>
+<p>Records whether a K-line template helped, updating its usage count and
+effectiveness EMA (ACT-R-style utility) so effective templates rank higher
+in future matches.
+<strong>Arguments:</strong>
+* <code>title</code> (str), <code>success</code> (bool)</p>
+<h3 id="marvin_match_template"><code>marvin_match_template</code></h3>
+<p>Selects the best-matching K-line templates for the current context via
+weighted trigger scoring (intent 0.5 as a hard gate, style 0.25, entity type
+0.25, plus a capped keyword bonus; ties break by effectiveness). Returns each
+template's plan, slots, and failure modes so the strategy can be applied.
+<strong>Arguments:</strong>
+* <code>context</code> (str, optional): Free text to match trigger phrases against.
+* <code>intent</code>, <code>styles</code>, <code>entity_types</code> (optional): Trigger dimensions.
+* <code>top_k</code> (int, optional): Defaults to 5.</p>
+<h3 id="marvin_log_episode"><code>marvin_log_episode</code></h3>
+<p>Log a completed task, fixed bug, or event.
+<strong>Arguments:</strong>
+* <code>title</code> (str): Short summary.
+* <code>summary</code> (str): Longer detail.
+* <code>details</code> (str, optional): In-depth context.</p>
+<h3 id="marvin_reflect"><code>marvin_reflect</code></h3>
+<p>Store a lesson learned.
+<strong>Arguments:</strong>
+* <code>title</code> (str)
+* <code>insight</code> (str)</p>
+<h2 id="advanced-retrieval">Advanced Retrieval</h2>
+<h3 id="marvin_search"><code>marvin_search</code></h3>
+<p>Performs a hybrid search (Reciprocal Rank Fusion on Vector + Keyword FTS5).
+<strong>Arguments:</strong>
+* <code>query</code> (str): The query string.
+* <code>kind</code> (str, optional): <code>semantic</code>, <code>procedural</code>, <code>episodic</code>, or <code>reflective</code>.
+* <code>limit</code> (int, optional): Defaults to 6.</p>
+<h3 id="marvin_recent_activity"><code>marvin_recent_activity</code></h3>
+<p>Fetches chronologically recent memories. Useful for getting caught up after an agent restart.</p>
+<h3 id="marvin_read_memory"><code>marvin_read_memory</code></h3>
+<p>Reads a single note by title, alias, or vault-relative path. The payload
+includes the note's structured facts alongside tags, links, and the body.
+<strong>Arguments:</strong>
+* <code>identifier</code> (str)</p>
+<h3 id="marvin_sync"><code>marvin_sync</code></h3>
+<p>Syncs the Obsidian vault into Marvin's local hybrid index (picks up notes
+added or edited outside the MCP tools, e.g. by hand in Obsidian).</p>
+<h2 id="maintenance-introspection">Maintenance &amp; Introspection</h2>
+<h3 id="marvin_consolidate"><code>marvin_consolidate</code></h3>
+<p>Runs the two-phase consolidation <strong>synchronously</strong> — episodic → semantic
+fact extraction (per-entity threshold, dedup), then semantic → reflective
+synthesis — without requiring the NATS worker. Returns counts plus the
+written notes. Use <code>marvin_trigger_sleep</code> instead when the background
+cluster is running.
+<strong>Arguments:</strong>
+* <code>model</code> (str, optional): LiteLLM model id override.
+* <code>api_base</code> (str, optional): e.g. a local ollama endpoint.</p>
+<h3 id="marvin_rebuild"><code>marvin_rebuild</code></h3>
+<p>Rebuilds every derived index from the authoritative Markdown vault —
+recovery from index corruption or schema changes.</p>
+<h3 id="marvin_consistency_check"><code>marvin_consistency_check</code></h3>
+<p>Compares the authoritative vault against the derived index: reports notes
+missing from the index and orphaned index rows.</p>
+<h3 id="marvin_health"><code>marvin_health</code></h3>
+<p>Runtime snapshot: vault/index paths, embedding and reranker backends
+(honest about lazy loading), GPU state, and retrieval settings.</p>
+<h2 id="advanced-git-worktrees">Advanced Git Worktrees</h2>
+<h3 id="marvin_start_worktree"><code>marvin_start_worktree</code></h3>
+<p><strong>Arguments:</strong> <code>branch_name</code> (str)
+Spawns a Git branch. Keeps the memory index clean during risky agent explorations.</p>
+<h3 id="marvin_merge_worktree"><code>marvin_merge_worktree</code></h3>
+<p><strong>Arguments:</strong> <code>branch_name</code> (str)
+Merges the worktree back to <code>main</code>.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+  <script>var tabs=__md_get("__tabs");if(Array.isArray(tabs))e:for(var set of document.querySelectorAll(".tabbed-set")){var labels=set.querySelector(".tabbed-labels");for(var tab of tabs)for(var label of labels.getElementsByTagName("label"))if(label.innerText.trim()===tab){var input=document.getElementById(label.htmlFor);input.checked=!0;continue e}}</script>
+
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "navigation.sections", "navigation.top", "navigation.indexes", "content.code.copy", "content.code.annotate", "content.tabs.link"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>

@@ -1,0 +1,2056 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="An Obsidian-native, Git-backed active memory cluster for AI agents.">
+      
+      
+      
+        <link rel="canonical" href="https://r0k3.github.io/marvin/guide/evaluation/">
+      
+      
+        <link rel="prev" href="../case-study/">
+      
+      
+        <link rel="next" href="../../reference/mcp-tools/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/logo.svg">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>Evaluation - Marvin</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="slate" data-md-color-primary="deep-purple" data-md-color-accent="deep-orange">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#evaluation" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="Marvin" class="md-header__button md-logo" aria-label="Marvin" data-md-component="logo">
+      
+  <img src="../../assets/logo.svg" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Marvin
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Evaluation
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="deep-purple" data-md-color-accent="deep-orange"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="deep-purple" data-md-color-accent="deep-orange"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/r0k3/marvin" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    r0k3/marvin
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../.." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../architecture/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Architecture
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../getting-started/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Guide
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../reference/mcp-tools/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Reference
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="Marvin" class="md-nav__button md-logo" aria-label="Marvin" data-md-component="logo">
+      
+  <img src="../../assets/logo.svg" alt="logo">
+
+    </a>
+    Marvin
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/r0k3/marvin" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    r0k3/marvin
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Guide
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Guide
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../getting-started/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting Started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../skills/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Agent Skills
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../case-study/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Case Study
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Evaluation
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Evaluation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#longmemeval-s" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        LongMemEval-S
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="LongMemEval-S">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#metrics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Metrics
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#quick-start" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Quick start
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#modes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Modes
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Modes">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#first-stage-over-fetch" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        First-stage over-fetch
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#k-lines-graph-stream" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        K-Lines graph stream
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#memory-decay-time-aware-re-ranking" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Memory decay (time-aware re-ranking)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#baseline-numbers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Baseline numbers
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Baseline numbers">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#cross-encoder-reranker-lift-full-500q" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cross-encoder reranker lift (full 500q)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#embedder-size-ab-100q-slice" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Embedder size A/B (100q slice)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hybrid-with-fastembed-on-gpu-vs-cpu" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Hybrid with fastembed on GPU vs CPU
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#end-to-end-qa-reader-judge" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        End-to-end QA (reader + judge)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="End-to-end QA (reader + judge)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#results-full-500-questions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Results (full 500 questions)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#ablation-retrieval-vs-full-long-context" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Ablation: retrieval vs. full long-context
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#reranking" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reranking
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#output" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Output
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#programmatic-api" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Programmatic API
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/mcp-tools/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    MCP Tools
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CLI (AXI)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#longmemeval-s" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        LongMemEval-S
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="LongMemEval-S">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#metrics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Metrics
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#quick-start" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Quick start
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#modes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Modes
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Modes">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#first-stage-over-fetch" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        First-stage over-fetch
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#k-lines-graph-stream" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        K-Lines graph stream
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#memory-decay-time-aware-re-ranking" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Memory decay (time-aware re-ranking)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#baseline-numbers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Baseline numbers
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Baseline numbers">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#cross-encoder-reranker-lift-full-500q" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cross-encoder reranker lift (full 500q)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#embedder-size-ab-100q-slice" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Embedder size A/B (100q slice)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hybrid-with-fastembed-on-gpu-vs-cpu" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Hybrid with fastembed on GPU vs CPU
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#end-to-end-qa-reader-judge" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        End-to-end QA (reader + judge)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="End-to-end QA (reader + judge)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#results-full-500-questions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Results (full 500 questions)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#ablation-retrieval-vs-full-long-context" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Ablation: retrieval vs. full long-context
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#reranking" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reranking
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#output" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Output
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#programmatic-api" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Programmatic API
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="evaluation">Evaluation</h1>
+<p>Marvin ships with a reproducible benchmark so changes to chunking, embeddings,
+ranking, or fusion can be measured against an external reference rather than
+vibes. It has two arms: <strong>retrieval</strong> (does the right session reach the
+top-K?) and <strong>end-to-end QA</strong> (<code>--qa</code>: does a reader LLM, fed the retrieved
+memories, actually answer correctly under the benchmark's official judging
+protocol?).</p>
+<h2 id="longmemeval-s">LongMemEval-S</h2>
+<p><a href="https://arxiv.org/abs/2410.10813">LongMemEval</a> (ICLR 2025) is a
+public benchmark for long-term chat memory. The "small" variant
+(<code>LongMemEval-S</code>) contains 500 questions, each paired with a haystack
+of ~50 prior chat sessions; the gold answer is contained in one or two
+of those sessions. We use the
+<a href="https://huggingface.co/datasets/xiaowu0162/longmemeval-cleaned"><code>xiaowu0162/longmemeval-cleaned</code></a>
+release, the same one that <code>agentmemory</code> reports against, so numbers are
+directly comparable.</p>
+<p>For each question the harness builds a fresh in-memory index from that
+question's haystack, runs a search with the question text, and checks
+whether any gold session id appears in the top-K results. With <code>--qa</code> it
+additionally feeds the top retrieved sessions to a reader LLM and grades
+the answer with the official per-question-type judge (see
+<a href="#end-to-end-qa-reader-judge">End-to-end QA</a> below).</p>
+<h3 id="metrics">Metrics</h3>
+<p>For each question (and aggregated across all questions):</p>
+<ul>
+<li><strong><code>recall_any@K</code></strong> — 1.0 if any gold session is in the top-K results.</li>
+<li><strong><code>NDCG@10</code></strong> — normalised DCG with binary session-level relevance.</li>
+<li><strong><code>MRR</code></strong> — reciprocal rank of the first gold session.</li>
+</ul>
+<p>The published <code>agentmemory</code> headline is <code>recall_any@5</code>.</p>
+<h3 id="quick-start">Quick start</h3>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="c1"># 1. Download the cleaned dataset (~270 MB, one-off).</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>python<span class="w"> </span>scripts/download_longmemeval.py
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="c1"># 2. Run the BM25 baseline on all 500 questions (~1 minute).</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>python<span class="w"> </span>-m<span class="w"> </span>marvin.eval<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="w">    </span>--dataset<span class="w"> </span>data/longmemeval_s_cleaned.json<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="w">    </span>--mode<span class="w"> </span>bm25<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="w">    </span>--output<span class="w"> </span>results/bm25.json
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>
+</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="c1"># 3. Run hybrid retrieval (BM25 + dense vectors via fastembed).</span>
+</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>python<span class="w"> </span>-m<span class="w"> </span>marvin.eval<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a><span class="w">    </span>--dataset<span class="w"> </span>data/longmemeval_s_cleaned.json<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-0-13"><a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a><span class="w">    </span>--mode<span class="w"> </span>hybrid<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-0-14"><a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a><span class="w">    </span>--output<span class="w"> </span>results/hybrid.json
+</span><span id="__span-0-15"><a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a>
+</span><span id="__span-0-16"><a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a><span class="c1"># 4. Quick sanity check without downloading any embedding model.</span>
+</span><span id="__span-0-17"><a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a>python<span class="w"> </span>-m<span class="w"> </span>marvin.eval<span class="w"> </span>--dataset<span class="w"> </span>PATH<span class="w"> </span>--mode<span class="w"> </span>bm25<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-0-18"><a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a><span class="w">    </span>--embedding-provider<span class="w"> </span><span class="nb">hash</span><span class="w"> </span>--limit<span class="w"> </span><span class="m">20</span>
+</span></code></pre></div>
+<h3 id="modes">Modes</h3>
+<table>
+<thead>
+<tr>
+<th>Mode</th>
+<th>Index streams</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>bm25</code></td>
+<td>SQLite FTS5 only</td>
+<td>Fastest; deterministic; no model.</td>
+</tr>
+<tr>
+<td><code>vector</code></td>
+<td><code>sqlite-vec</code> only</td>
+<td>Pure dense retrieval ablation.</td>
+</tr>
+<tr>
+<td><code>hybrid</code></td>
+<td>FTS5 + sqlite-vec, RRF fused</td>
+<td>Default. Mirrors <code>service.search</code>.</td>
+</tr>
+</tbody>
+</table>
+<p><code>--rerank</code> composes orthogonally with any mode. The first stage fetches a
+pool of chunks (controlled by <code>--rerank-depth</code>), the cross-encoder scores
+each <code>(query, chunk_text)</code> pair, and the session-level result is the
+max-pool of chunk scores. See <a href="#reranking">Reranking</a> below.</p>
+<h4 id="first-stage-over-fetch">First-stage over-fetch</h4>
+<p>Each first-stage ranker (FTS5 and <code>sqlite-vec</code>) pulls
+<code>max(limit * first_stage_overfetch, first_stage_overfetch_min)</code> chunks
+before RRF fusion. The defaults (multiplier <code>5</code>, floor <code>20</code>) preserve
+the previous hardcoded behaviour and are now exposed via
+<code>MARVIN_FIRST_STAGE_OVERFETCH</code> / <code>MARVIN_FIRST_STAGE_OVERFETCH_MIN</code> (or
+the matching fields on <code>MarvinSettings</code>). Increase the multiplier for
+deeper recall before reranking; decrease it to cut first-stage SQL
+work. When <code>--rerank</code> is enabled, <code>--rerank-depth</code> is the second-stage
+pool size; if it exceeds what RRF can produce given the per-stream
+limit, the reranker gets fewer candidates than requested.</p>
+<h4 id="k-lines-graph-stream">K-Lines graph stream</h4>
+<p>The <code>hybrid</code> mode is actually a three-stream pipeline: FTS5 +
+<code>sqlite-vec</code> (chunk-level, max-pooled to notes) and a third <em>graph</em>
+stream that ranks notes by edge weight to query entities. Wikilinks
+extracted from note bodies (<code>[[Apple Card]]</code>) populate an
+<code>entity_edges</code> table during indexing; query terms are resolved to
+entities via case-fold word-boundary matching, and notes linking to
+those entities are ranked by total edge weight. The graph note
+ranking is RRF-fused with the chunk-tier note ranking before reranking.</p>
+<p>An optional regex-based fallback extractor (<code>MARVIN_KG_EXTRACT_AT_INGEST=true</code>,
+default <code>false</code>) populates entities from the body of unconsolidated
+notes (chat sessions, freshly-pasted markdown). Enabling it adds a
+multi-word capitalised noun phrase pass (<code>Apple Card</code>, <code>Western Australia</code>)
+behind a stop-word filter that drops sentence-fragment phrases like
+<code>But I</code> or <code>Once I</code>. We default it off because LongMemEval-S is
+chat-style data: capitalised tokens are dominated by sentence-starter
+imperatives (<code>Remember</code>, <code>However</code>, <code>Did</code>) rather than entities, and
+the few real entities a query references rarely line up with what the
+regex finds in the haystack. The empirical impact on the 100-question
+slice (hash embedder, hybrid mode):</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>kg off</th>
+<th>kg + wikilinks-only (default)</th>
+<th>kg + wikilinks + at-ingest</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>R@5</td>
+<td>86.0%</td>
+<td>86.0%</td>
+<td>84.0% (-2pp)</td>
+</tr>
+<tr>
+<td>R@10</td>
+<td>90.0%</td>
+<td>90.0%</td>
+<td>90.0%</td>
+</tr>
+<tr>
+<td>NDCG@10</td>
+<td>69.3%</td>
+<td>69.3%</td>
+<td>68.9% (-0.4pp)</td>
+</tr>
+<tr>
+<td>MRR</td>
+<td>68.1%</td>
+<td>68.1%</td>
+<td>67.7% (-0.4pp)</td>
+</tr>
+<tr>
+<td>multi-session R@5</td>
+<td>90.0%</td>
+<td>90.0%</td>
+<td>83.3% (-7pp)</td>
+</tr>
+<tr>
+<td>single-session R@5</td>
+<td>84.3%</td>
+<td>84.3%</td>
+<td>84.3%</td>
+</tr>
+</tbody>
+</table>
+<p>Wikilinks-only graph (Phase 1A) is silent on raw chat data and
+matches the chunk-only baseline exactly. Enable at-ingest when:</p>
+<ul>
+<li>the vault is wikilink-consolidated and you want freshly-ingested
+  notes to contribute graph signal before the next consolidation
+  pass;</li>
+<li>the source text is curated (docs, research notes) where
+  capitalisation reliably marks proper nouns.</li>
+</ul>
+<p>Toggles, all <code>MARVIN_KG_*</code> env vars or fields on <code>MarvinSettings</code>:</p>
+<table>
+<thead>
+<tr>
+<th>setting</th>
+<th>default</th>
+<th>purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>kg_enabled</code></td>
+<td><code>true</code></td>
+<td>toggle the third stream entirely</td>
+</tr>
+<tr>
+<td><code>kg_rrf_k</code></td>
+<td><code>60.0</code></td>
+<td>RRF damping constant</td>
+</tr>
+<tr>
+<td><code>kg_fusion_weight</code></td>
+<td><code>0.5</code></td>
+<td>graph-stream weight in fusion (<code>&lt; 1</code> keeps strong chunk matches from being displaced)</td>
+</tr>
+<tr>
+<td><code>kg_extract_at_ingest</code></td>
+<td><code>false</code></td>
+<td>regex fallback entity extraction</td>
+</tr>
+<tr>
+<td><code>kg_ingest_min_length</code></td>
+<td><code>3</code></td>
+<td>drop short capitalised tokens</td>
+</tr>
+<tr>
+<td><code>kg_ingest_multiword_only</code></td>
+<td><code>true</code></td>
+<td>drop single-word at-ingest entities</td>
+</tr>
+</tbody>
+</table>
+<p>The graph ranker is IDF-weighted (<code>log((N+1)/(df+0.5))</code>) so common
+entities (the speaker's name, the platform brand) contribute little
+and rare entities a lot, mirroring BM25's term weighting.</p>
+<h4 id="memory-decay-time-aware-re-ranking">Memory decay (time-aware re-ranking)</h4>
+<p><code>hybrid_search</code> can apply a <em>freshness boost</em> on top of the final note
+ranking: notes whose <code>updated_at</code> is closer to the query time get a
+multiplicative score lift, capped at <code>1 + decay_weight</code> for an
+instant-old note and asymptoting to <code>1.0</code> for very old notes. The boost
+is purely additive — old-but-relevant notes never get demoted below
+their honest RRF rank. See <code>marvin.decay</code> for the formula.</p>
+<table>
+<thead>
+<tr>
+<th>setting</th>
+<th>default</th>
+<th>purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>decay_enabled</code></td>
+<td><code>false</code></td>
+<td>toggle the freshness boost</td>
+</tr>
+<tr>
+<td><code>decay_half_life_days</code></td>
+<td><code>30.0</code></td>
+<td>exponential half-life (days)</td>
+</tr>
+<tr>
+<td><code>decay_weight</code></td>
+<td><code>0.5</code></td>
+<td>maximum boost (1.0 = double the score for an instant-old note)</td>
+</tr>
+<tr>
+<td><code>decay_kinds_csv</code></td>
+<td><code>"episodic"</code></td>
+<td>comma-separated kinds the boost applies to (<code>"episodic,procedural"</code>, <code>"all"</code>, <code>""</code>)</td>
+</tr>
+</tbody>
+</table>
+<p>The kind filter exists because semantic facts ("Berlin is the capital
+of Germany") and procedural how-tos ("how to deploy the staging
+service") are largely timeless: a 12-month-old fact is just as true as
+a fresh one, so demoting it on age is wrong by construction. Episodic
+chat sessions, by contrast, have a strong recency prior. The default
+<code>decay_kinds_csv = "episodic"</code> mirrors that intuition.</p>
+<p>LongMemEval-S impact (n=30, <code>--question-type knowledge-update</code>,
+hybrid no-rerank):</p>
+<table>
+<thead>
+<tr>
+<th>Config</th>
+<th>R@5</th>
+<th>NDCG@10</th>
+<th>MRR</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>decay off (control)</td>
+<td>100.0%</td>
+<td>97.6%</td>
+<td>98.3%</td>
+</tr>
+<tr>
+<td>decay on, weight=0.05, half-life=14d</td>
+<td>100.0%</td>
+<td>92.3%</td>
+<td>92.8%</td>
+</tr>
+<tr>
+<td>decay on, weight=0.5, half-life=30d</td>
+<td>96.7%</td>
+<td>70.1%</td>
+<td>73.4%</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Decay is a regression on LongMemEval and is therefore off by default.</strong>
+The benchmark's gold sessions are roughly uniformly distributed across
+each haystack's timeline, so favouring fresh sessions pulls noise into
+the top-K. Decay is shipped as opt-in for deployments where freshness
+<em>is</em> a relevance prior — typical chat assistants where "what did I just
+say about X?" or "yesterday's bug" overwhelmingly want the latest
+matching note. Tune <code>decay_weight</code> very conservatively (≤0.1) and
+benchmark on your own data before flipping it on.</p>
+<p>When decay does help is exactly the regime LongMemEval doesn't measure:
+the user <em>changed their mind</em> and there are now two contradicting
+notes on the same topic. The agentmemory project surfaces this with
+LLM-based contradiction detection at consolidation time; Marvin's
+roadmap puts that as a separate feature on top of decay.</p>
+<h3 id="baseline-numbers">Baseline numbers</h3>
+<p>Full LongMemEval-S (500 questions), default chunking (1200 / 200),
+<code>fastembed</code> 0.8 with
+<code>onnxruntime-gpu</code> 1.25 on a single RTX 4090 (CUDA 12.9, FP16 reranker
+ONNX). Embedder: <code>BAAI/bge-small-en-v1.5</code> (384 dim, the latest in the
+BGE-small line — there is no v2.0 yet). Reranker:
+<code>BAAI/bge-reranker-v2-m3</code> (FP16 ONNX, depth 50).</p>
+<table>
+<thead>
+<tr>
+<th>Mode</th>
+<th>R@5</th>
+<th>R@10</th>
+<th>R@20</th>
+<th>NDCG@10</th>
+<th>MRR</th>
+<th>Median latency</th>
+<th>Wall</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>BM25 (FTS5 only)</td>
+<td>95.6%</td>
+<td>98.2%</td>
+<td>99.2%</td>
+<td>87.3%</td>
+<td>89.2%</td>
+<td>144 ms</td>
+<td>88 s</td>
+</tr>
+<tr>
+<td>Hybrid (BM25+vec)</td>
+<td>98.0%</td>
+<td>99.0%</td>
+<td>99.6%</td>
+<td>91.9%</td>
+<td>92.7%</td>
+<td>853 ms</td>
+<td>456 s</td>
+</tr>
+<tr>
+<td>Hybrid + rerank</td>
+<td><strong>99.6%</strong></td>
+<td>99.6%</td>
+<td>99.8%</td>
+<td><strong>95.3%</strong></td>
+<td><strong>95.5%</strong></td>
+<td>1 178 ms</td>
+<td>663 s</td>
+</tr>
+</tbody>
+</table>
+<p>Per question type (Hybrid + rerank, n=500):</p>
+<table>
+<thead>
+<tr>
+<th>Type (n)</th>
+<th>R@5</th>
+<th>R@10</th>
+<th>NDCG@10</th>
+<th>MRR</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>knowledge-update (n=78)</td>
+<td>100.0%</td>
+<td>100.0%</td>
+<td>99.8%</td>
+<td>100.0%</td>
+</tr>
+<tr>
+<td>single-session-assistant (n=56)</td>
+<td>100.0%</td>
+<td>100.0%</td>
+<td>100.0%</td>
+<td>100.0%</td>
+</tr>
+<tr>
+<td>single-session-user (n=70)</td>
+<td>100.0%</td>
+<td>100.0%</td>
+<td>98.1%</td>
+<td>97.5%</td>
+</tr>
+<tr>
+<td>multi-session (n=133)</td>
+<td>100.0%</td>
+<td>100.0%</td>
+<td>92.1%</td>
+<td>92.5%</td>
+</tr>
+<tr>
+<td>temporal-reasoning (n=133)</td>
+<td>99.2%</td>
+<td>99.2%</td>
+<td>93.7%</td>
+<td>95.2%</td>
+</tr>
+<tr>
+<td>single-session-preference (n=30)</td>
+<td>96.7%</td>
+<td>96.7%</td>
+<td>88.8%</td>
+<td>86.2%</td>
+</tr>
+</tbody>
+</table>
+<p>For reference, <code>agentmemory</code> reports <code>recall_any@5 = 95.2%</code> on the same
+dataset using BM25 + dense vectors with cross-encoder reranking. Marvin
+hits that headline with BM25 alone (95.6%) and pulls <strong>+4.4 pp</strong> ahead
+with the full hybrid + reranker stack (99.6%). The historically-hardest
+slice (<code>single-session-preference</code>) climbs from 73.3% on BM25 → 90.0%
+hybrid → <strong>96.7%</strong> with reranking.</p>
+<h4 id="cross-encoder-reranker-lift-full-500q">Cross-encoder reranker lift (full 500q)</h4>
+<p>Going from <code>Hybrid</code> to <code>Hybrid + rerank</code> on the full benchmark with the
+real <code>bge-small-en-v1.5</code> embedder:</p>
+<table>
+<thead>
+<tr>
+<th>Slice</th>
+<th>Δ R@5</th>
+<th>Δ NDCG@10</th>
+<th>Δ MRR</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>All 500</td>
+<td>+1.6 pp</td>
+<td>+3.4 pp</td>
+<td>+2.8 pp</td>
+</tr>
+<tr>
+<td><code>single-session-preference</code> (n=30)</td>
+<td><strong>+6.7 pp</strong></td>
+<td><strong>+14.7 pp</strong></td>
+<td><strong>+19.6 pp</strong></td>
+</tr>
+<tr>
+<td><code>single-session-user</code> (n=70)</td>
+<td>+2.9 pp</td>
+<td>+4.2 pp</td>
+<td>+4.4 pp</td>
+</tr>
+<tr>
+<td><code>temporal-reasoning</code> (n=133)</td>
+<td>+2.2 pp</td>
+<td>+5.0 pp</td>
+<td>+3.5 pp</td>
+</tr>
+<tr>
+<td><code>multi-session</code> (n=133)</td>
+<td>+0.8 pp</td>
+<td>+0.5 pp</td>
+<td>-1.2 pp</td>
+</tr>
+</tbody>
+</table>
+<p>Reranking pays off most on the slices where order matters (preferences,
+user-question recall). On <code>multi-session</code> the first stage already has
+the gold session in the top-1 most of the time; the cross-encoder mostly
+breaks ties.</p>
+<h4 id="embedder-size-ab-100q-slice">Embedder size A/B (100q slice)</h4>
+<p><code>bge-base-en-v1.5</code> (768 dim, ~210 MB) compared head-to-head with
+<code>bge-small-en-v1.5</code> on the first 100 questions, no rerank:</p>
+<table>
+<thead>
+<tr>
+<th>Embedder</th>
+<th>R@5</th>
+<th>R@10</th>
+<th>NDCG@10</th>
+<th>MRR</th>
+<th>Median latency</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>BAAI/bge-small-en-v1.5</code></td>
+<td>97.0%</td>
+<td>98.0%</td>
+<td>91.6%</td>
+<td>91.5%</td>
+<td>1 033 ms</td>
+</tr>
+<tr>
+<td><code>BAAI/bge-base-en-v1.5</code></td>
+<td>97.0%</td>
+<td>100.0%</td>
+<td>93.7%</td>
+<td>93.2%</td>
+<td>1 918 ms</td>
+</tr>
+</tbody>
+</table>
+<p><code>bge-base</code> improves NDCG/MRR by ~2 pp at roughly 2× the latency. On this
+benchmark the cross-encoder reranker is a much bigger lever than going
+from <code>bge-small</code> to <code>bge-base</code>, so the default keeps <code>bge-small-en-v1.5</code>
+(67 MB, 384 dim) and recommends turning on reranking when ranking
+quality matters.</p>
+<h4 id="hybrid-with-fastembed-on-gpu-vs-cpu">Hybrid with <code>fastembed</code> on GPU vs CPU</h4>
+<p><code>fastembed</code> autodetects CUDA when <code>onnxruntime-gpu</code> is installed
+alongside the matching NVIDIA wheels. On the same RTX 4090 host, the
+500q hybrid run takes ~7 minutes (median 853 ms / question); on a
+32-core Threadripper CPU only, it takes 16+ hours because the ~512-char
+chunks hit the bge-small attention quadratically.</p>
+<p>To enable GPU inference on Linux + NVIDIA (CUDA 12.x, cuDNN 9.x), install
+the <code>gpu</code> extra:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>uv<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span><span class="s1">&#39;marvin[gpu]&#39;</span>
+</span></code></pre></div>
+<p>With the extra installed, the reranker automatically selects the FP16 ONNX
+weights (the CUDA execution provider does not accelerate int8 matmul, so the
+int8 CPU default would be ~100x slower on GPU). <code>MARVIN_RERANK_MODEL_FILE</code>
+still overrides the choice explicitly.</p>
+<p>The <code>gpu</code> extra pulls in <code>onnxruntime-gpu</code> and the matching
+<code>nvidia-*-cu12</code> wheels (~2.5 GB on disk). At first use,
+:func:<code>marvin.gpu.bootstrap</code> <code>ctypes</code>-preloads the bundled CUDA / cuDNN
+libraries into the running process so onnxruntime's CUDA execution
+provider can find them without <code>LD_LIBRARY_PATH</code> plumbing. The preload
+is idempotent and can be disabled with <code>MARVIN_DISABLE_GPU_BOOTSTRAP=1</code>
+if the host CUDA toolkit is older than the wheel-bundled libs.
+<code>MarvinService.health()</code> reports <code>gpu_active</code> and <code>gpu_lib_count</code> so
+you can verify a deployment is using the GPU.</p>
+<p>For CPU-only iteration:</p>
+<ul>
+<li>Cap embedding text aggressively: <code>--max-embed-chars 128</code> is ~5× faster
+  than the default 512 with little recall impact in our spot checks.</li>
+<li>Use <code>--limit N</code> to evaluate on a subset.</li>
+<li>Use <code>--mode bm25</code> for changes that don't touch dense retrieval.</li>
+</ul>
+<h3 id="end-to-end-qa-reader-judge">End-to-end QA (reader + judge)</h3>
+<p>Retrieval on LongMemEval-S is effectively <strong>saturated</strong> (99.6% <code>recall_any@5</code>
+— the gold session is in the top-5 for 498/500 questions), so end-to-end
+accuracy is gated by the <em>reader</em>, not by retrieval. The <code>--qa</code> arm measures
+that directly:</p>
+<ul>
+<li><strong>Reader:</strong> the top <code>--reader-top-k</code> (default 10) retrieved sessions are
+  presented as a JSON array of kind-labelled, timestamped memory entries, and
+  the reader answers using <strong>JSON + Chain-of-Note</strong> — the best-performing
+  reading strategy in the original LongMemEval paper. Abstention is
+  permitted (30 of the 500 questions are unanswerable by design). Default
+  reader: <code>ollama/qwen3.6:35b-a3b-q4_K_M</code> — local and quantized.</li>
+<li><strong>Judge:</strong> a faithful re-implementation of the official evaluation
+  (<code>xiaowu0162/LongMemEval</code> → <code>evaluate_qa.py</code>): the exact per-question-type
+  yes/no prompts, <code>temperature=0</code>, and the dedicated abstention branch.
+  Comparability comes from the prompts and protocol; the judge model is
+  configurable (<code>--judge-model</code>, default: an independent frontier model).</li>
+<li><strong>Scoring:</strong> QA accuracy is over all 500 questions (abstention included);
+  retrieval aggregates keep excluding abstention per the official protocol,
+  so the recall numbers above stay comparable.</li>
+</ul>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="c1"># Retrieval + local-reader QA. MARVIN_EMBED_CPU=1 keeps the embedder off the</span>
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="c1"># GPU so it never contends with the local reader.</span>
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="nv">MARVIN_EMBED_CPU</span><span class="o">=</span><span class="m">1</span><span class="w"> </span>python<span class="w"> </span>-m<span class="w"> </span>marvin.eval<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="w">    </span>--dataset<span class="w"> </span>data/longmemeval_s_cleaned.json<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="w">    </span>--rerank<span class="w"> </span>--qa<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="w">    </span>--reader-model<span class="w"> </span>ollama/qwen3.6:35b-a3b-q4_K_M<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-2-7"><a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="w">    </span>--reader-api-base<span class="w"> </span>http://localhost:11434<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-2-8"><a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a><span class="w">    </span>--results-dir<span class="w"> </span>results
+</span></code></pre></div>
+<h4 id="results-full-500-questions">Results (full 500 questions)</h4>
+<p>Reader: <code>qwen3.6:35b-a3b</code> (q4_K_M, local via ollama — a quantized 35B
+mixture-of-experts with ~3B active parameters). Judge: an independent
+frontier model under the official per-type protocol.</p>
+<table>
+<thead>
+<tr>
+<th>Question type</th>
+<th>recall@5</th>
+<th>QA accuracy</th>
+<th>n</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>single-session-assistant</td>
+<td>100.0%</td>
+<td><strong>100.0%</strong></td>
+<td>56</td>
+</tr>
+<tr>
+<td>single-session-user</td>
+<td>100.0%</td>
+<td>95.7%</td>
+<td>70</td>
+</tr>
+<tr>
+<td>knowledge-update</td>
+<td>100.0%</td>
+<td>88.5%</td>
+<td>78</td>
+</tr>
+<tr>
+<td>temporal-reasoning</td>
+<td>99.2%</td>
+<td>83.5%</td>
+<td>133</td>
+</tr>
+<tr>
+<td>single-session-preference</td>
+<td>96.7%</td>
+<td>70.0%</td>
+<td>30</td>
+</tr>
+<tr>
+<td>multi-session</td>
+<td>100.0%</td>
+<td>67.7%</td>
+<td>133</td>
+</tr>
+<tr>
+<td><strong>Overall</strong></td>
+<td><strong>99.6%</strong></td>
+<td><strong>82.8%</strong> (414/500)</td>
+<td>500</td>
+</tr>
+</tbody>
+</table>
+<p>For context, the strongest published LongMemEval-S results cluster around
+90–93% — all driven by frontier <em>cloud</em> readers (vendor-reported, varied
+judges). Marvin reaches 82.8% with a <strong>local, quantized</strong> reader, no cloud
+dependency, and zero LLM calls on the write or query path. The residual gap
+is reader capability, not memory: on the hardest slice (multi-session
+counting), most failures occur with <em>all</em> gold sessions already in the
+reader's context.</p>
+<p>The number is robust to the judge: re-grading the same hypotheses with the
+local reader model as judge ("self-grading") yields 82.6% overall — identical
+within noise — so an independent judge does not inflate the result.</p>
+<h4 id="ablation-retrieval-vs-full-long-context">Ablation: retrieval vs. full long-context</h4>
+<p>Would a long-context model make the memory layer unnecessary? Same local
+reader and judge, varying only the context, on a stratified 48-question
+sample (8 per type):</p>
+<table>
+<thead>
+<tr>
+<th>Context</th>
+<th>Tokens/question</th>
+<th>Overall QA</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Full history (~45 sessions)</td>
+<td>~126k</td>
+<td>45.8%</td>
+</tr>
+<tr>
+<td><strong>Retrieval + rerank (top-10)</strong></td>
+<td><strong>~16k</strong></td>
+<td><strong>81.2%</strong></td>
+</tr>
+</tbody>
+</table>
+<p>Retrieval beats full-context by <strong>+35 points while using ~8× fewer tokens</strong>
+— a textbook lost-in-the-middle failure for the full-context arm (the
+single-session-assistant slice collapses to 0% when the one relevant session
+is buried among ~45). The memory layer is not a cost optimization bolted
+onto a long-context model; it is what makes a local model accurate at all
+on this benchmark.</p>
+<h3 id="reranking">Reranking</h3>
+<p>Hybrid retrieval is strong at <em>finding</em> the right chunk but RRF only uses
+rank order — it ignores query-document interactions. A cross-encoder
+reranker reads the query and each candidate jointly and typically lifts
+top-K precision by 5–15 points on open-domain QA tasks at the cost of a
+few hundred ms per query on CPU.</p>
+<p>The harness (and <code>MarvinService.search</code>) ship with an optional reranking
+pass backed by <a href="https://qdrant.github.io/fastembed/"><code>fastembed</code>'s</a>
+<code>TextCrossEncoder</code>. The default model is
+<a href="https://huggingface.co/BAAI/bge-reranker-v2-m3"><code>BAAI/bge-reranker-v2-m3</code></a>:
+multilingual, 568M params, Apache-2.0. BAAI does not publish ONNX weights
+directly, so Marvin registers the community
+<a href="https://huggingface.co/onnx-community/bge-reranker-v2-m3-ONNX"><code>onnx-community/bge-reranker-v2-m3-ONNX</code></a>
+port via <code>TextCrossEncoder.add_custom_model</code> the first time the reranker
+is constructed. The ONNX weights are selected by device: the int8-quantised
+variant (<code>onnx/model_quantized.onnx</code>, ~570 MB) on CPU, the FP16 variant on a
+CUDA-capable host, with <code>MARVIN_RERANK_MODEL_FILE</code> as an explicit override.
+Any reranker listed by
+<code>TextCrossEncoder.list_supported_models()</code> works too — pass e.g.
+<code>--rerank-model Xenova/ms-marco-MiniLM-L-6-v2</code> for a faster, English-only
+alternative.</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="c1"># BM25 retrieval + cross-encoder reranking on the first 50 questions.</span>
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>python<span class="w"> </span>-m<span class="w"> </span>marvin.eval<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="w">    </span>--dataset<span class="w"> </span>data/longmemeval_s_cleaned.json<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="w">    </span>--mode<span class="w"> </span>bm25<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="w">    </span>--rerank<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="w">    </span>--rerank-depth<span class="w"> </span><span class="m">50</span><span class="w"> </span><span class="se">\</span>
+</span><span id="__span-3-7"><a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="w">    </span>--limit<span class="w"> </span><span class="m">50</span><span class="w"> </span><span class="se">\</span>
+</span><span id="__span-3-8"><a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a><span class="w">    </span>--output<span class="w"> </span>results/bm25_rerank.json
+</span></code></pre></div>
+<p>Flags:</p>
+<ul>
+<li><code>--rerank</code> — enable the cross-encoder.</li>
+<li><code>--rerank-model</code> — HF model id (default: <code>BAAI/bge-reranker-v2-m3</code>).</li>
+<li><code>--rerank-depth</code> — first-stage chunk pool size (default: 50). Chunks,
+  not sessions: several chunks from the same session are scored
+  independently and max-pooled back.</li>
+<li><code>--rerank-max-chars</code> — per-document truncation before tokenisation
+  (default: 1024). Keeps CPU cost bounded.</li>
+</ul>
+<p>Why <em>chunk</em> reranking rather than session-level? LongMemEval sessions are
+long conversations (commonly 10–20 KB of raw turns). The reranker's input
+window is effectively 512 tokens, so naively prefixing a whole session
+discards the very signal we need. Scoring the chunks that first-stage
+retrieval already matched, then max-pooling to sessions, recovers the
+signal cleanly.</p>
+<p>Performance: with <code>bge-reranker-v2-m3</code> (FP16 ONNX) on a single RTX 4090,
+the full 500-question hybrid+rerank run takes ~11 minutes (median
+1.18 s / query, +325 ms on top of the no-rerank hybrid). On an int8
+ONNX/CPU path, budget a few minutes of wall time per 100 questions, or
+pick a smaller model (e.g. <code>Xenova/ms-marco-MiniLM-L-6-v2</code>) for
+interactive iteration. MCP gateway queries pay the reranker cost once
+per <code>search()</code> call and only when <code>rerank_enabled</code> is set.</p>
+<h3 id="output">Output</h3>
+<p>The CLI prints a per-question-type breakdown and writes a JSON dump.</p>
+<p><strong>Single-shot:</strong> pass <code>--output PATH</code> to write to a specific file.</p>
+<p><strong>Versioned (recommended for tracking regressions):</strong> pass
+<code>--results-dir DIR</code> instead. The summary lands at
+<code>DIR/&lt;git-short-sha&gt;/&lt;auto-name&gt;.json</code> where the auto-name encodes the
+configuration knobs that change retrieval behaviour (mode, embedder,
+reranker, limit, K-Lines flags). A dirty working tree gets a <code>-dirty</code>
+suffix on the SHA so uncommitted changes are obvious in the directory
+listing.</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="c1"># Same SHA, three runs, no clobbering:</span>
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>python<span class="w"> </span>-m<span class="w"> </span>marvin.eval<span class="w"> </span>--dataset<span class="w"> </span>PATH<span class="w"> </span>--mode<span class="w"> </span>bm25<span class="w">       </span>--results-dir<span class="w"> </span>results
+</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="c1"># -&gt; results/263e199/bm25.json</span>
+</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>python<span class="w"> </span>-m<span class="w"> </span>marvin.eval<span class="w"> </span>--dataset<span class="w"> </span>PATH<span class="w"> </span>--mode<span class="w"> </span>hybrid<span class="w">     </span>--results-dir<span class="w"> </span>results
+</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="c1"># -&gt; results/263e199/hybrid.json</span>
+</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>python<span class="w"> </span>-m<span class="w"> </span>marvin.eval<span class="w"> </span>--dataset<span class="w"> </span>PATH<span class="w"> </span>--mode<span class="w"> </span>hybrid<span class="w"> </span>--rerank<span class="w"> </span>--results-dir<span class="w"> </span>results
+</span><span id="__span-4-7"><a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="c1"># -&gt; results/263e199/hybrid-rerank.json</span>
+</span></code></pre></div>
+<p>The schema:</p>
+<div class="language-json highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="p">{</span>
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="w">  </span><span class="nt">&quot;mode&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;hybrid&quot;</span><span class="p">,</span>
+</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="w">  </span><span class="nt">&quot;embedding_provider&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;fastembed&quot;</span><span class="p">,</span>
+</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="w">  </span><span class="nt">&quot;embedding_model&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;BAAI/bge-small-en-v1.5&quot;</span><span class="p">,</span>
+</span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="w">  </span><span class="nt">&quot;questions&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">500</span><span class="p">,</span>
+</span><span id="__span-5-6"><a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="w">  </span><span class="nt">&quot;recall_at_5&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">0.980</span><span class="p">,</span>
+</span><span id="__span-5-7"><a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a><span class="w">  </span><span class="nt">&quot;recall_at_10&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">0.990</span><span class="p">,</span>
+</span><span id="__span-5-8"><a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a><span class="w">  </span><span class="nt">&quot;ndcg_at_10&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">0.919</span><span class="p">,</span>
+</span><span id="__span-5-9"><a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a><span class="w">  </span><span class="nt">&quot;mrr&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">0.927</span><span class="p">,</span>
+</span><span id="__span-5-10"><a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a><span class="w">  </span><span class="nt">&quot;median_latency_ms&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">852.6</span><span class="p">,</span>
+</span><span id="__span-5-11"><a id="__codelineno-5-11" name="__codelineno-5-11" href="#__codelineno-5-11"></a><span class="w">  </span><span class="nt">&quot;total_seconds&quot;</span><span class="p">:</span><span class="w"> </span><span class="mf">455.9</span><span class="p">,</span>
+</span><span id="__span-5-12"><a id="__codelineno-5-12" name="__codelineno-5-12" href="#__codelineno-5-12"></a><span class="w">  </span><span class="nt">&quot;per_type&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nt">&quot;...&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;...&quot;</span><span class="w"> </span><span class="p">},</span>
+</span><span id="__span-5-13"><a id="__codelineno-5-13" name="__codelineno-5-13" href="#__codelineno-5-13"></a><span class="w">  </span><span class="nt">&quot;per_question&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"> </span><span class="s2">&quot;...&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;...&quot;</span><span class="w"> </span><span class="p">]</span>
+</span><span id="__span-5-14"><a id="__codelineno-5-14" name="__codelineno-5-14" href="#__codelineno-5-14"></a><span class="p">}</span>
+</span></code></pre></div>
+<p><code>per_question</code> includes the retrieved session ids, gold ids, and per-question
+metrics — useful for digging into failure cases.</p>
+<h3 id="programmatic-api">Programmatic API</h3>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">marvin.embeddings</span><span class="w"> </span><span class="kn">import</span> <span class="n">EmbeddingService</span>
+</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="kn">from</span><span class="w"> </span><span class="nn">marvin.eval.longmemeval</span><span class="w"> </span><span class="kn">import</span> <span class="n">load_dataset</span><span class="p">,</span> <span class="n">run_benchmark</span>
+</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="kn">from</span><span class="w"> </span><span class="nn">marvin.reranker</span><span class="w"> </span><span class="kn">import</span> <span class="n">RerankerService</span>
+</span><span id="__span-6-5"><a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>
+</span><span id="__span-6-6"><a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a><span class="n">entries</span> <span class="o">=</span> <span class="n">load_dataset</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="s2">&quot;data/longmemeval_s_cleaned.json&quot;</span><span class="p">))</span>
+</span><span id="__span-6-7"><a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a><span class="n">summary</span> <span class="o">=</span> <span class="n">run_benchmark</span><span class="p">(</span>
+</span><span id="__span-6-8"><a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a>    <span class="n">entries</span><span class="p">[:</span><span class="mi">50</span><span class="p">],</span>
+</span><span id="__span-6-9"><a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a>    <span class="n">mode</span><span class="o">=</span><span class="s2">&quot;hybrid&quot;</span><span class="p">,</span>
+</span><span id="__span-6-10"><a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a>    <span class="n">embedder</span><span class="o">=</span><span class="n">EmbeddingService</span><span class="p">(),</span>
+</span><span id="__span-6-11"><a id="__codelineno-6-11" name="__codelineno-6-11" href="#__codelineno-6-11"></a>    <span class="n">reranker</span><span class="o">=</span><span class="n">RerankerService</span><span class="p">(</span><span class="n">provider</span><span class="o">=</span><span class="s2">&quot;fastembed&quot;</span><span class="p">),</span>
+</span><span id="__span-6-12"><a id="__codelineno-6-12" name="__codelineno-6-12" href="#__codelineno-6-12"></a>    <span class="n">rerank_depth</span><span class="o">=</span><span class="mi">50</span><span class="p">,</span>
+</span><span id="__span-6-13"><a id="__codelineno-6-13" name="__codelineno-6-13" href="#__codelineno-6-13"></a><span class="p">)</span>
+</span><span id="__span-6-14"><a id="__codelineno-6-14" name="__codelineno-6-14" href="#__codelineno-6-14"></a><span class="nb">print</span><span class="p">(</span><span class="n">summary</span><span class="o">.</span><span class="n">recall_at_5</span><span class="p">,</span> <span class="n">summary</span><span class="o">.</span><span class="n">mrr</span><span class="p">)</span>
+</span></code></pre></div>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+  <script>var tabs=__md_get("__tabs");if(Array.isArray(tabs))e:for(var set of document.querySelectorAll(".tabbed-set")){var labels=set.querySelector(".tabbed-labels");for(var tab of tabs)for(var label of labels.getElementsByTagName("label"))if(label.innerText.trim()===tab){var input=document.getElementById(label.htmlFor);input.checked=!0;continue e}}</script>
+
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "navigation.sections", "navigation.top", "navigation.indexes", "content.code.copy", "content.code.annotate", "content.tabs.link"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>
