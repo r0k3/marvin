@@ -11,7 +11,7 @@
 
 **An active, Obsidian-native, Git-backed memory system for AI agents.**
 
-Named in homage to **Marvin Minsky** and his foundational book [*The Society of Mind*](https://amzn.to/3PuFQ3K), Marvin turns ephemeral LLM context windows into a durable, topologically connected knowledge base. It is the reference implementation of the research paper [*K-Lines: A Cognitively-Grounded Four-Memory Architecture for Persistent Conversational AI*](https://papers.ssrn.com/sol3/papers.cfm?abstract_id=6234218) (and its [companion repository](https://github.com/r0k3/k-lines)).
+Named in homage to **Marvin Minsky** and his foundational book [*The Society of Mind*](https://amzn.to/3PuFQ3K), Marvin turns ephemeral LLM context windows into a durable, topologically connected knowledge base. It is the reference implementation of the research paper [*K-Lines: A Cognitively-Grounded Four-Memory Architecture for Persistent Conversational AI*](https://ssrn.com/abstract=6234218) (and its [companion repository](https://github.com/r0k3/k-lines)).
 
 **Headline results on [LongMemEval-S](https://arxiv.org/abs/2410.10813)** (500 questions, ~115k-token haystacks): **99.6% `recall_any@5`** retrieval, and **82.8% end-to-end QA accuracy with a fully local, quantized reader** — within ~10 points of frontier-cloud-reader systems, with zero LLM calls on the write or query path and no cloud dependency. [Full numbers →](https://r0k3.github.io/marvin/guide/evaluation/)
 
@@ -254,6 +254,24 @@ Full documentation is at **[r0k3.github.io/marvin](https://r0k3.github.io/marvin
 ## Contributing
 
 Contributions are welcome! Please open an issue or submit a pull request on [GitHub](https://github.com/r0k3/marvin).
+
+## Citation
+
+If you use Marvin in your research, please cite the paper:
+
+> Kende, Robert, *K-Lines: A Cognitively-Grounded Four-Memory Architecture for Persistent Conversational AI* (February 06, 2026). Available at SSRN: <https://ssrn.com/abstract=6234218> or <http://dx.doi.org/10.2139/ssrn.6234218>
+
+```bibtex
+@misc{kende2026klines,
+  author       = {Kende, Robert},
+  title        = {K-Lines: A Cognitively-Grounded Four-Memory Architecture for Persistent Conversational AI},
+  year         = {2026},
+  month        = feb,
+  howpublished = {SSRN},
+  doi          = {10.2139/ssrn.6234218},
+  url          = {https://ssrn.com/abstract=6234218}
+}
+```
 
 ## License
 
