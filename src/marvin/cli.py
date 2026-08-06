@@ -481,6 +481,160 @@ def cmd_health(service: MarvinService, args: argparse.Namespace) -> int:
     return 0
 
 
+def _http_ok(url: str, timeout: float = 1.5) -> bool:
+    from urllib.request import urlopen
+
+    try:
+        with urlopen(url, timeout=timeout) as resp:
+            return 200 <= resp.status < 500
+    except Exception:
+        return False
+
+
+def _tcp_ok(host: str, port: int, timeout: float = 1.5) -> bool:
+    import socket
+
+    try:
+        with socket.create_connection((host, port), timeout=timeout):
+            return True
+    except OSError:
+        return False
+
+
+def cmd_doctor(service: MarvinService | None, args: argparse.Namespace) -> int:
+    """Install-state checkup: every component, its status, the exact fix.
+
+    Read-only by design: creates no directories, loads no models, calls
+    no LLM. Missing optional components are reported with install
+    commands, not treated as failures.
+    """
+    from importlib import metadata
+    from importlib.util import find_spec
+    from urllib.parse import urlparse
+
+    settings = _build_settings(args)
+    fixes: list[tuple[str, str]] = []
+
+    try:
+        version = metadata.version("marvin-memory")
+    except metadata.PackageNotFoundError:
+        version = "dev"
+
+    # Core: vault + index. A missing vault is "not initialized", not broken.
+    vault_path = settings.resolved_vault_path
+    if vault_path.is_dir():
+        note_count = sum(
+            1 for kind in MemoryKind for _ in (vault_path / kind.folder_name).glob("*.md")
+        )
+        vault_status = f"{vault_path} ({note_count} notes)"
+        git_status = "yes" if (vault_path / ".git").is_dir() else "no"
+        if git_status == "no":
+            fixes.append(("git -C <vault> init", "version the vault (memory writes as commits)"))
+    else:
+        vault_status = f"{vault_path} (missing — created on first write)"
+        git_status = "n/a"
+    index_status = "present" if settings.index_path.exists() else "absent (built on first sync)"
+
+    _print(
+        encode_kv(
+            "doctor",
+            {
+                "version": version,
+                "vault": vault_status,
+                "vault_git": git_status,
+                "index": index_status,
+            },
+        )
+    )
+
+    # Retrieval: embedder + reranker + GPU extra.
+    fastembed_ok = find_spec("fastembed") is not None
+    if settings.embedding_provider == "hash":
+        embedding = "hash (configured)"
+    elif fastembed_ok:
+        embedding = f"fastembed {settings.embedding_model}"
+    else:
+        embedding = "hash fallback (fastembed unavailable)"
+        fixes.append(("uv pip install fastembed", "restore dense-vector retrieval"))
+    try:
+        gpu_extra = f"onnxruntime-gpu {metadata.version('onnxruntime-gpu')}"
+    except metadata.PackageNotFoundError:
+        gpu_extra = "not installed (CPU inference)"
+    _print(
+        encode_kv(
+            "retrieval",
+            {
+                "embedding": embedding,
+                "rerank": "on" if settings.rerank_enabled else "off (MARVIN_RERANK_ENABLED=1)",
+                "gpu_extra": gpu_extra,
+            },
+        )
+    )
+
+    # Sleep pass: [consolidate] extra + model endpoint.
+    consolidate_ok = find_spec("litellm") is not None and find_spec("langextract") is not None
+    sleep: dict[str, object] = {
+        "extra_installed": "yes" if consolidate_ok else "no",
+        "model": settings.sleep_model,
+    }
+    if not consolidate_ok:
+        fixes.append(
+            (
+                "uv tool install 'marvin-memory[consolidate]'",
+                "enable the sleep pass (entity extraction + consolidation)",
+            )
+        )
+    elif settings.sleep_model.startswith("ollama/"):
+        base = settings.sleep_api_base or "http://127.0.0.1:11434"
+        reachable = _http_ok(f"{base.rstrip('/')}/api/version")
+        sleep["endpoint"] = f"{base} ({'reachable' if reachable else 'unreachable'})"
+        if not reachable:
+            fixes.append(
+                ("ollama serve", f"the sleep model {settings.sleep_model} needs this endpoint")
+            )
+    _print(encode_kv("sleep", sleep))
+
+    # Bus: single-process default vs the [cluster] profile.
+    cluster: dict[str, object] = {
+        "bus": "memory (single-process)" if settings.bus == "memory" else "nats",
+        "extra_installed": "yes" if find_spec("nats") is not None else "no",
+    }
+    if settings.bus == "nats":
+        if find_spec("nats") is None:
+            fixes.append(
+                (
+                    "uv tool install 'marvin-memory[cluster]'",
+                    "MARVIN_BUS=nats requires the NATS client",
+                )
+            )
+        parsed = urlparse(settings.nats_url)
+        host, port = parsed.hostname or "127.0.0.1", parsed.port or 4222
+        reachable = _tcp_ok(host, port)
+        cluster["nats"] = f"{host}:{port} ({'reachable' if reachable else 'unreachable'})"
+        if not reachable:
+            fixes.append(("docker compose up -d nats", "start the broker MARVIN_BUS=nats expects"))
+    _print(encode_kv("cluster", cluster))
+
+    # The bundled agent skill.
+    project_skill = Path.cwd() / ".claude" / "skills" / "marvin-memory"
+    user_skill = Path.home() / ".claude" / "skills" / "marvin-memory"
+    if not project_skill.is_dir() and not user_skill.is_dir():
+        fixes.append(("marvin skill install", "teach your agent when to use memory"))
+    _print(
+        encode_kv(
+            "skill",
+            {
+                "project": "installed" if project_skill.is_dir() else "absent",
+                "user": "installed" if user_skill.is_dir() else "absent",
+            },
+        )
+    )
+
+    if fixes:
+        _print(encode_help(fixes))
+    return 0
+
+
 def cmd_consolidate(service: MarvinService, args: argparse.Namespace) -> int:
     from .consolidation import ConsolidationEngine
 
@@ -698,6 +852,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.set_defaults(func=cmd_check)
     p = sub.add_parser("health", help="Runtime health snapshot")
     p.set_defaults(func=cmd_health)
+    p = sub.add_parser("doctor", help="Install-state checkup with exact fix commands")
+    p.set_defaults(func=cmd_doctor, needs_service=False)
 
     p = sub.add_parser(
         "consolidate",

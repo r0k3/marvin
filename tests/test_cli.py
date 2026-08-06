@@ -195,3 +195,17 @@ class TestErrorsAndServe:
         monkeypatch.setattr(cli._server, "main", lambda argv: called.setdefault("argv", argv))
         assert cli.main(["serve", "--transport", "sse", "--port", "9000"]) == 0
         assert called["argv"] == ["--transport", "sse", "--port", "9000"]
+
+
+class TestDoctor:
+    def test_read_only_checkup_reports_and_suggests_fixes(self, vault, capsys, monkeypatch):
+        monkeypatch.setattr(cli, "_http_ok", lambda url, timeout=1.5: False)
+        code = run(vault, "doctor")
+        out = capsys.readouterr().out
+        assert code == 0
+        assert "doctor:" in out and "version:" in out
+        assert "missing — created on first write" in out
+        assert not vault.exists()  # read-only: doctor must not create the vault
+        assert "retrieval:" in out and "sleep:" in out and "cluster:" in out
+        assert "memory (single-process)" in out
+        assert "help[" in out  # at least one actionable fix under the patched probe
