@@ -29,7 +29,7 @@ Because Marvin's vault is natively backed by **Git**, agents can check out isola
 ### 3. Asynchronous Consolidation (Computational Sleep)
 Biological memory isn't just stored; it is *consolidated* while we sleep. 
 
-Marvin utilizes a Dockerized architecture with a **NATS** message broker and a background **Brain Worker**. We chose NATS because it is exceptionally lightweight, simple to deploy, and highly extensible. While your agent rapidly logs noisy, raw "Episodic" events, the Brain Worker asynchronously uses local NLP (`langextract`) to map entities, and a local LLM (default `qwen3.6:35b-a3b-q4_K_M` via Ollama) to consolidate memory in two phases: entity-scoped **Semantic** facts extracted from episodes, then cross-fact **Reflective** insights synthesized per aspect — overnight, without blocking your workflow.
+While your agent rapidly logs noisy, raw "Episodic" events, Marvin's **sleep pass** uses LLM extraction (`langextract`) to map entities, and a local LLM (default `qwen3.6:35b-a3b-q4_K_M` via Ollama) to consolidate memory in two phases: entity-scoped **Semantic** facts extracted from episodes, then cross-fact **Reflective** insights synthesized per aspect — without ever blocking your workflow. The vault itself is the work queue (`extracted` / `consolidated` frontmatter flags), so the pass runs wherever suits your deployment: on demand (`marvin consolidate`), in the background of the serve process, or — for always-on setups — via the optional Docker cluster with a **NATS** broker and a dedicated **Brain Worker**.
 
 ---
 

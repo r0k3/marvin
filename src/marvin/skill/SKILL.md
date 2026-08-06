@@ -68,7 +68,7 @@ just failures.
 - **End of a session or milestone:** `marvin_finalize_session` /
   `marvin session finalize <title> --summary <s> [--fact <f>] [--reflection <r>]`.
 - **≥3 unconsolidated episodes** (the CLI dashboard shows the count):
-  trigger consolidation — `marvin_trigger_sleep` (background cluster) or
+  trigger the sleep pass — `marvin_trigger_sleep` (background) or
   `marvin_consolidate` / `marvin consolidate` (synchronous).
 - **Risky or exploratory multi-step work:** branch memory first —
   `marvin_start_worktree` / `marvin worktree start <branch>` — merge on

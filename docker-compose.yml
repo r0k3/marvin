@@ -23,7 +23,8 @@ services:
       - MARVIN_TRANSPORT=sse
       - MARVIN_HOST=0.0.0.0
       - MARVIN_PORT=8421
-      - NATS_URL=nats://nats:4222
+      - MARVIN_BUS=nats
+      - MARVIN_NATS_URL=nats://nats:4222
     volumes:
       - ./marvin_vault:/app/marvin_vault
     depends_on:
@@ -35,8 +36,8 @@ services:
       dockerfile: Dockerfile
     command: ["uv", "run", "python", "-m", "marvin.worker"]
     environment:
-      - NATS_URL=nats://nats:4222
-      - OLLAMA_HOST=http://ollama:11434
+      - MARVIN_NATS_URL=nats://nats:4222
+      - MARVIN_SLEEP_API_BASE=http://ollama:11434
     volumes:
       - ./marvin_vault:/app/marvin_vault
     depends_on:

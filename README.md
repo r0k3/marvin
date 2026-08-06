@@ -46,7 +46,7 @@ Biological memory is *consolidated* during sleep. Marvin's background **Brain Wo
 - **Structured Semantic Facts** — stable fact IDs, predicates, aspects, confidence, and soft deprecation with `replaced_by` linking.
 - **K-Line Procedural Templates** — Minsky-style partial reactivation: weighted trigger scoring plus an ACT-R-style utility (usage count + effectiveness EMA), surfaced automatically by `marvin_prepare_session`.
 - **Deep Semantic Graphing** — zero-shot entity extraction with automatic `[[Wikilink]]` injection; the wikilink graph feeds retrieval.
-- **Computational Sleep** — two-phase background consolidation using local open-weight models (default `qwen3.6:35b-a3b-q4_K_M` via Ollama).
+- **Computational Sleep** — two-phase consolidation using local open-weight models (default `qwen3.6:35b-a3b-q4_K_M` via Ollama); runs on demand, in the background of the serve process, or via the optional worker cluster. The vault's `extracted`/`consolidated` flags are the durable work queue.
 - **Hybrid Retrieval** — three-stream Reciprocal Rank Fusion (SQLite FTS5 + `sqlite-vec` dense vectors + IDF-weighted entity graph), optional `bge-reranker-v2-m3` cross-encoder (int8 on CPU, fp16 on GPU), and opt-in time-aware freshness decay.
 - **MCP Gateway** — 20 tools (the full service surface) over SSE (port 8421) or stdio; plugs into any MCP-compatible agent.
 - **AXI CLI** — the same functionality as an [axi.md](https://axi.md/)-style command line: token-efficient TOON output, a live dashboard on bare `marvin`, `help[]` next-step hints, structured errors. Built for agents driving a shell, pleasant for humans.
@@ -67,7 +67,17 @@ Two facts worth knowing: the published SOTA cluster (90–93%) is driven by fron
 
 ## Architecture
 
-Marvin runs as four lightweight services orchestrated by Docker Compose:
+**By default, Marvin is one process.** `marvin serve` bundles the vault, the hybrid index, the MCP server, and the sleep pass; the base install is retrieval-only (zero LLM dependencies), and two extras unlock more:
+
+| Extra | Adds | Needed for |
+|---|---|---|
+| `marvin-memory[consolidate]` | litellm + langextract | The sleep pass: entity extraction and two-phase consolidation |
+| `marvin-memory[cluster]` | nats-py | The multi-process cluster profile below |
+| `marvin-memory[gpu]` | CUDA onnxruntime | GPU embeddings + fp16 reranker |
+
+There is no broker in the default profile because **the vault itself is the work queue**: `extracted`/`consolidated` frontmatter flags mark pending work durably, so sleep passes resume exactly where the vault says — after crashes, restarts, or weeks of not running. And scaling follows Git, not a message bus: replicate the vault via a Git remote; every node rebuilds its index locally.
+
+For **always-on background processing**, the optional Docker Compose cluster (`MARVIN_BUS=nats`) splits the same code into four services:
 
 | Service | Role |
 |---|---|
@@ -115,6 +125,7 @@ You immediately have the AXI command line:
 marvin remember "DB" --predicate storage --value "PostgreSQL with asyncpg"
 marvin search "postgres"                 # TOON output: hits[1]{title,kind,path}: ...
 marvin skill install                     # teach your agent when to use all this
+marvin doctor                            # install-state checkup, with exact fix commands
 ```
 
 Bare `marvin` is a live dashboard, not help text — token-efficient TOON your agent (or you) can read at a glance:
@@ -152,9 +163,16 @@ And the MCP server for your agent:
 }
 ```
 
-This gives you the vault, hybrid retrieval, and all 20 tools — without the background worker.
+This gives you the vault, hybrid retrieval, and all 20 tools. Add the sleep pass (entity extraction + two-phase consolidation with any litellm-supported model) with the `consolidate` extra:
 
-### Full cluster (Docker, with the Brain Worker)
+```bash
+uv tool install 'marvin-memory[consolidate] @ git+https://github.com/r0k3/marvin'
+marvin consolidate            # drain the queue whenever you like
+```
+
+### Full cluster (Docker, with the Brain Worker — optional)
+
+For always-on background processing instead of on-demand sleep.
 
 **Prerequisites:** [Docker](https://docs.docker.com/get-docker/) and Docker Compose.
 
@@ -174,7 +192,7 @@ The MCP Gateway is now listening on `http://localhost:8421/sse`.
 ### GPU acceleration (optional)
 
 ```bash
-uv pip install 'marvin[gpu]'   # Linux + NVIDIA (CUDA 12.x): embeddings + fp16 reranker on GPU
+uv pip install 'marvin-memory[gpu]'   # Linux + NVIDIA (CUDA 12.x): embeddings + fp16 reranker on GPU
 ```
 
 ## Agent Configuration

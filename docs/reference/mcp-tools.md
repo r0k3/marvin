@@ -24,9 +24,11 @@ semantic facts, procedures, and reflections in the same call.
 * `tags`, `links` (list[str], optional)
 
 ### `marvin_trigger_sleep`
-Trigger background consolidation ("computational sleep") via the Brain Worker:
-phase 1 extracts entity-scoped semantic facts from unconsolidated episodes,
-phase 2 synthesizes reflective insights across accumulated facts.
+Trigger a background sleep pass ("computational sleep") — in-process by
+default, via the Brain Worker in cluster mode: entity extraction over
+unprocessed notes, then phase 1 (entity-scoped semantic facts from
+unconsolidated episodes) and phase 2 (reflective insights across
+accumulated facts). Requires the `consolidate` extra.
 
 ## Core Storage Tools
 
@@ -122,14 +124,14 @@ added or edited outside the MCP tools, e.g. by hand in Obsidian).
 ## Maintenance & Introspection
 
 ### `marvin_consolidate`
-Runs the two-phase consolidation **synchronously** — episodic → semantic
-fact extraction (per-entity threshold, dedup), then semantic → reflective
-synthesis — without requiring the NATS worker. Returns counts plus the
-written notes. Use `marvin_trigger_sleep` instead when the background
-cluster is running.
+Runs the full sleep pass **synchronously** — entity extraction over
+unprocessed notes, then episodic → semantic fact extraction (per-entity
+threshold, dedup), then semantic → reflective synthesis. Returns counts
+(`notes_linked`, `facts_extracted`, `insights_created`) plus the written
+notes. Use `marvin_trigger_sleep` for the background equivalent.
 **Arguments:**
-* `model` (str, optional): LiteLLM model id override.
-* `api_base` (str, optional): e.g. a local ollama endpoint.
+* `model` (str, optional): LiteLLM model id override (default: `MARVIN_SLEEP_MODEL`).
+* `api_base` (str, optional): e.g. a local ollama endpoint (default: `MARVIN_SLEEP_API_BASE`).
 
 ### `marvin_rebuild`
 Rebuilds every derived index from the authoritative Markdown vault —

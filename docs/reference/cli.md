@@ -83,7 +83,8 @@ agent *when* to act on what the dashboard shows. For Claude Code:
 | `marvin session finalize <title> --summary s [--fact f ...] [--reflection r ...]` | Closing episode + optional extractions |
 | `marvin sync` / `marvin rebuild` / `marvin check` | Index maintenance (vault is authoritative; `check` exits 1 on drift) |
 | `marvin health` | Runtime snapshot: backends, GPU, paths |
-| `marvin consolidate [--model m] [--api-base u]` | Two-phase consolidation now, synchronously (episodic → semantic → reflective) |
+| `marvin doctor` | Read-only install-state checkup; every missing component paired with its exact fix command |
+| `marvin consolidate [--model m] [--api-base u]` | Full sleep pass now, synchronously (entity extraction → episodic → semantic → reflective) |
 | `marvin worktree start <branch>` / `marvin worktree merge <branch>` | Branch memory for risky work |
 | `marvin skill show` | Print the bundled `marvin-memory` agent skill (paste into any harness) |
 | `marvin skill install [--user\|--target <dir>]` | Install the skill into a skills directory (default: `./.claude/skills`) |

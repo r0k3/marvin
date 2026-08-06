@@ -266,7 +266,7 @@ To enable GPU inference on Linux + NVIDIA (CUDA 12.x, cuDNN 9.x), install
 the `gpu` extra:
 
 ```bash
-uv pip install 'marvin[gpu]'
+uv pip install 'marvin-memory[gpu]'
 ```
 
 With the extra installed, the reranker automatically selects the FP16 ONNX

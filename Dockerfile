@@ -20,7 +20,8 @@ RUN mkdir -p marvin_vault && cd marvin_vault && git init
 # Install dependencies into system environment so uv run isn't strictly necessary 
 # if we wanted, but uv run handles the virtualenv perfectly.
 COPY . .
-RUN uv sync
+# The compose cluster needs the NATS client and the LLM consolidation stack.
+RUN uv sync --extra cluster --extra consolidate
 
 # Default command for the gateway
 CMD ["uv", "run", "marvin", "--transport", "sse", "--host", "0.0.0.0", "--port", "8421"]

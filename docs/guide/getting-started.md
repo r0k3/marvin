@@ -2,12 +2,28 @@
 
 ## Quick Installation
 
-For standard usage without the advanced worker node, install the core package
-straight from GitHub:
+Marvin runs as a **single process** by default — vault, hybrid index, MCP
+server, and CLI in one install, with no broker or background daemon. Install
+the core package straight from GitHub:
 
 ```bash
 uv tool install git+https://github.com/r0k3/marvin
 ```
+
+The base install is retrieval-only (zero LLM dependencies). Two optional
+extras unlock more:
+
+```bash
+# LLM "computational sleep": entity extraction + two-phase consolidation
+uv tool install 'marvin-memory[consolidate] @ git+https://github.com/r0k3/marvin'
+
+# run `marvin consolidate` any time to drain the queue — the vault's
+# `extracted` / `consolidated` flags track exactly what is pending
+```
+
+At any point, `marvin doctor` reports the install state of every component
+(embedder, GPU, extras, sleep endpoint, skill) with the exact command that
+fixes anything missing.
 
 ### Starting the Local MCP Gateway
 
@@ -34,9 +50,12 @@ Installing also gives you the [AXI command line](../reference/cli.md): run
 `marvin` with no arguments for a live vault dashboard, `marvin search <query>`
 for token-efficient recall, and `marvin --help` for the full command list.
 
-## Running the Advanced Cluster (Docker)
+## Running the Advanced Cluster (Docker, optional)
 
-To utilize the **Background Brain Worker** (for automatic consolidation and deep knowledge graph extraction via Google's `langextract`):
+The single-process default covers most deployments: the serve process runs
+sleep passes in-process, and `marvin consolidate` works on demand. For an
+**always-on** setup where a dedicated **Brain Worker** processes events
+continuously (NATS-brokered, `MARVIN_BUS=nats`), run the Docker cluster:
 
 1. Clone the repository:
    ```bash
