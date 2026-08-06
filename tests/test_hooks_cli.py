@@ -91,6 +91,21 @@ class TestUserPromptHook:
         assert run(vault, "hook", "user-prompt") == 0
         assert capsys.readouterr().out == ""
 
+    def test_json_format_emits_envelope(self, vault, capsys, monkeypatch):
+        run(vault, "remember", "DB", "--predicate", "storage", "--value", "PostgreSQL")
+        capsys.readouterr()
+        _stdin(monkeypatch, {"prompt": "which postgresql storage do we use?"})
+        assert run(vault, "hook", "user-prompt", "--format", "json") == 0
+        payload = json.loads(capsys.readouterr().out)
+        inner = payload["hookSpecificOutput"]
+        assert inner["hookEventName"] == "UserPromptSubmit"
+        assert "PostgreSQL" in inner["additionalContext"]
+
+    def test_json_format_stays_silent_on_no_hits(self, vault, capsys, monkeypatch):
+        _stdin(monkeypatch, {"prompt": "completely unrelated zebra question here"})
+        assert run(vault, "hook", "user-prompt", "--format", "json") == 0
+        assert capsys.readouterr().out == ""
+
 
 class TestAutoProjectTag:
     def test_writes_gain_repo_tag(self, vault, capsys, monkeypatch, tmp_path):
@@ -199,6 +214,10 @@ class TestHooksInstaller:
         path = project / ".grok" / "hooks" / "marvin.json"
         data = json.loads(path.read_text())
         assert "SessionStart" in data["hooks"] and "UserPromptSubmit" in data["hooks"]
+        # Grok only injects the structured envelope, so its commands must
+        # carry --format json (verified against grok 0.2.118 end-to-end).
+        command = data["hooks"]["UserPromptSubmit"][0]["hooks"][0]["command"]
+        assert command == "marvin hook user-prompt --format json"
         capsys.readouterr()
 
         assert run(vault, "hooks", "install", "--host", "grok") == 0

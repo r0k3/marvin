@@ -674,6 +674,26 @@ def _clip_lines(lines: list[str], budget: int) -> list[str]:
     return out
 
 
+def _emit_hook_output(text: str, *, event: str, fmt: str) -> None:
+    """Print hook context in the host's expected shape; nothing when empty.
+
+    ``plain``: raw stdout (Claude Code and Codex CLI inject it directly).
+    ``json``: the structured ``hookSpecificOutput.additionalContext``
+    envelope — required by Grok Build, which (verified empirically, against
+    its docs' claim) does NOT inject plain stdout for these events.
+    """
+    if not text:
+        return
+    if fmt == "json":
+        import json
+
+        print(
+            json.dumps({"hookSpecificOutput": {"hookEventName": event, "additionalContext": text}})
+        )
+    else:
+        print(text)
+
+
 def cmd_hook_session_start(service: MarvinService, args: argparse.Namespace) -> int:
     try:
         payload = _read_hook_stdin()
@@ -710,7 +730,7 @@ def cmd_hook_session_start(service: MarvinService, args: argparse.Namespace) -> 
         )
         clipped = _clip_lines(lines, max(budget - len(use) - 1, 0))
         clipped.append(use)
-        print("\n".join(clipped))
+        _emit_hook_output("\n".join(clipped), event="SessionStart", fmt=args.format)
         return 0
     except Exception as exc:  # never break the host session
         print(f"marvin hook error: {exc}", file=sys.stderr)
@@ -747,7 +767,9 @@ def cmd_hook_user_prompt(service: MarvinService, args: argparse.Namespace) -> in
                 lines.append(f"  {hit.title} ({hit.kind.value}): {excerpt}")
 
         if lines:
-            print("\n".join(_clip_lines(lines, budget)))
+            _emit_hook_output(
+                "\n".join(_clip_lines(lines, budget)), event="UserPromptSubmit", fmt=args.format
+            )
         return 0
     except Exception as exc:  # never break the host session
         print(f"marvin hook error: {exc}", file=sys.stderr)
@@ -765,10 +787,15 @@ _HOOK_EVENTS: tuple[tuple[str, str, int], ...] = (
 )
 
 
-def _hook_config() -> dict:
+def _hook_config(fmt: str = "plain") -> dict:
+    # Grok Build only injects the hookSpecificOutput envelope (verified
+    # empirically); Claude Code and Codex CLI inject plain stdout.
+    suffix = " --format json" if fmt == "json" else ""
     return {
         "hooks": {
-            event: [{"hooks": [{"type": "command", "command": command, "timeout": timeout}]}]
+            event: [
+                {"hooks": [{"type": "command", "command": command + suffix, "timeout": timeout}]}
+            ]
             for event, command, timeout in _HOOK_EVENTS
         }
     }
@@ -830,13 +857,20 @@ def cmd_hooks_install(service: MarvinService | None, args: argparse.Namespace) -
         # file there, so install is a plain (re)write, naturally idempotent.
         base = Path.home() / ".grok" if args.user else Path.cwd() / ".grok"
         path = base / "hooks" / "marvin.json"
-        rendered = json.dumps(_hook_config(), indent=2) + "\n"
+        rendered = json.dumps(_hook_config("json"), indent=2) + "\n"
         existed = path.exists() and path.read_text(encoding="utf-8") == rendered
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(rendered, encoding="utf-8")
         added = [] if existed else [event for event, _, _ in _HOOK_EVENTS]
         if not args.user:
             hints.append(("/hooks-trust", "trust these project hooks inside Grok Build (one-time)"))
+        hints.append(
+            (
+                "marvin skill install --host grok",
+                "IMPORTANT: grok <=0.2.118 runs these hooks but discards their output"
+                " (verified) — recall works via the skill + MCP until xai ships injection",
+            )
+        )
     else:
         _print(
             encode_error(
@@ -920,7 +954,7 @@ def cmd_hooks_show(service: MarvinService | None, args: argparse.Namespace) -> i
         }[host]
         print(f"# {host}: merge into {target}")
         print(f"# (or just run: marvin hooks install --host {host})")
-        print(json.dumps(_hook_config(), indent=2))
+        print(json.dumps(_hook_config("json" if host == "grok" else "plain"), indent=2))
         return 0
     if host == "opencode":
         print(_OPENCODE_PLUGIN)
@@ -1198,12 +1232,24 @@ def build_parser() -> argparse.ArgumentParser:
     hk_sub = hk.add_subparsers(dest="hook_command", required=True)
     p = hk_sub.add_parser("session-start", help="Print session-start memory context (stdout)")
     p.add_argument("--budget-chars", type=int, default=None, dest="budget_chars")
+    p.add_argument(
+        "--format",
+        default="plain",
+        choices=["plain", "json"],
+        help="json = hookSpecificOutput envelope (required by grok)",
+    )
     p.set_defaults(func=cmd_hook_session_start)
     p = hk_sub.add_parser(
         "user-prompt", help="Print prompt-relevant recall (stdout; lexical-only, no model load)"
     )
     p.add_argument("query", nargs="*", help="prompt text (default: hook JSON on stdin)")
     p.add_argument("--budget-chars", type=int, default=None, dest="budget_chars")
+    p.add_argument(
+        "--format",
+        default="plain",
+        choices=["plain", "json"],
+        help="json = hookSpecificOutput envelope (required by grok)",
+    )
     p.set_defaults(func=cmd_hook_user_prompt)
 
     hks = sub.add_parser("hooks", help="Install or show host hook configuration")

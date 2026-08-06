@@ -53,21 +53,24 @@ Hooks always exit 0 — a broken vault never breaks a session. Dry-run them
 any time: `marvin hook session-start`, or
 `echo '{"prompt":"..."}' | marvin hook user-prompt`.
 
-**Host support** (`marvin hooks install --host <h>`, verified mid-2026):
+**Host support** (`marvin hooks install --host <h>`):
 
 | Host | Support | Mechanism | Note |
 |---|---|---|---|
-| Claude Code | full | `.claude/settings.json` hooks | |
-| Codex CLI | full | `.codex/hooks.json` | trust project hooks once via `/hooks` |
-| Grok Build | full | `.grok/hooks/marvin.json` | trust once via `/hooks-trust` |
+| Claude Code | **full — verified end-to-end** | `.claude/settings.json` hooks | plain stdout injected; env propagated to hooks |
+| Codex CLI | full (per docs; untested) | `.codex/hooks.json` | trust project hooks once via `/hooks` |
+| Grok Build | partial | `.grok/hooks/marvin.json` | hooks *run* but grok ≤0.2.118 **discards their output** (verified against the binary) — use the skill + MCP for recall; the installed config uses the `hookSpecificOutput` envelope and goes live if xai ships injection |
 | OpenCode | manual | TypeScript plugin (experimental API) | `marvin hooks show --host opencode` |
 | Amp | manual | TypeScript plugin | `marvin hooks show --host amp` |
 
-Claude Code, Codex CLI, and Grok Build share the same hook contract (JSON
-payload on stdin, plain stdout injected on exit 0), so one `marvin hook`
-command serves all three. OpenCode and Amp expose only TypeScript plugin
-APIs — `hooks show` prints ready-to-save plugin templates, with an
-explicit fragility warning for OpenCode's experimental hook.
+End-to-end verification (2026-08-06, real headless sessions, an
+unguessable fact seeded in the vault): **Claude Code** answered from
+hook-injected memory with tool use disabled — including with the vault
+outside the project, reachable only via `MARVIN_VAULT_PATH`. **Grok
+Build** answered via the skill path instead ("I'll check project
+memory" → ran `marvin search`), because its current build executes
+session-start/user-prompt hooks but drops their stdout: `marvin skill
+install --host grok` is the working grok integration today.
 
 ### Starting the Local MCP Gateway
 
