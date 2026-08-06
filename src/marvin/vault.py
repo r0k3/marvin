@@ -8,6 +8,7 @@ from pathlib import Path
 import yaml
 
 from .models import MemoryKind, NoteMetadata, NoteRecord, SemanticFact, utc_now
+from .sanitize import strip_invisible
 
 FRONTMATTER_RE = re.compile(r"^---\n(.*?)\n---\n?", re.DOTALL)
 HEADING_RE = re.compile(r"^#\s+(.+)$", re.MULTILINE)
@@ -95,6 +96,11 @@ class VaultStore:
         usage_count: int | None = None,
         effectiveness: float | None = None,
     ) -> tuple[Path, bool]:
+        # Every write is stripped of invisible/bidi code points — they have no
+        # legitimate role in memory notes and are the classic vector for
+        # instructions a human auditor cannot see. Visible text is untouched.
+        title = strip_invisible(title)
+        body = strip_invisible(body)
         path = existing_path or self.note_path(kind, title, unique=unique)
         created = not path.exists()
 

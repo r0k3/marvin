@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import Iterable
 from functools import cached_property
 from pathlib import Path
@@ -34,7 +35,10 @@ from .models import (
     SyncReport,
 )
 from .reranker import RerankerService
+from .sanitize import scan_injection
 from .vault import VaultStore, normalize_links, normalize_tags
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     # litellm's import is slow; ConsolidationEngine is only needed at runtime
@@ -676,6 +680,17 @@ class MarvinService:
                 value = str(item.get("value") or "").strip()
                 if not value:
                     continue
+                flagged = scan_injection(value)
+                if flagged:
+                    # LLM output feeding future agent context gets no benefit
+                    # of the doubt: drop and log. (Direct agent/user writes
+                    # are never content-filtered — see marvin.sanitize.)
+                    logger.warning(
+                        "Dropped consolidation fact for %s (injection shapes: %s)",
+                        entity,
+                        ", ".join(flagged),
+                    )
+                    continue
                 try:
                     confidence = float(item.get("confidence", 0.6))
                 except (TypeError, ValueError):
@@ -723,6 +738,14 @@ class MarvinService:
                 title = str(item.get("title") or "").strip()
                 content = str(item.get("insight") or "").strip()
                 if not title or not content or title.casefold() in seen:
+                    continue
+                flagged = scan_injection(f"{title}\n{content}")
+                if flagged:
+                    logger.warning(
+                        "Dropped reflective insight %r (injection shapes: %s)",
+                        title,
+                        ", ".join(flagged),
+                    )
                     continue
                 seen.add(title.casefold())
                 tags = [aspect]
