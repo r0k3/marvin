@@ -175,11 +175,55 @@ class TestHooksInstaller:
         data2 = json.loads(settings_path.read_text())
         assert data2["hooks"]["SessionStart"] == data["hooks"]["SessionStart"]  # idempotent
 
-    def test_unwired_host_points_to_show(self, vault, capsys):
-        assert run(vault, "hooks", "install", "--host", "codex") == 2
-        assert "hooks show --host codex" in capsys.readouterr().out
+    def test_codex_merges_hooks_json(self, vault, capsys, monkeypatch, tmp_path):
+        project = tmp_path / "proj"
+        project.mkdir()
+        monkeypatch.chdir(project)
 
-    def test_show_claude_prints_snippet(self, vault, capsys):
+        assert run(vault, "hooks", "install", "--host", "codex") == 0
+        data = json.loads((project / ".codex" / "hooks.json").read_text())
+        handlers = [h for e in data["hooks"]["UserPromptSubmit"] for h in e["hooks"]]
+        assert handlers[0]["command"] == "marvin hook user-prompt"
+        assert handlers[0]["timeout"] == 10
+        assert "/hooks" in capsys.readouterr().out  # trust-gate hint
+
+        assert run(vault, "hooks", "install", "--host", "codex") == 0
+        assert "(already installed)" in capsys.readouterr().out
+
+    def test_grok_owns_its_hook_file(self, vault, capsys, monkeypatch, tmp_path):
+        project = tmp_path / "proj"
+        project.mkdir()
+        monkeypatch.chdir(project)
+
+        assert run(vault, "hooks", "install", "--host", "grok") == 0
+        path = project / ".grok" / "hooks" / "marvin.json"
+        data = json.loads(path.read_text())
+        assert "SessionStart" in data["hooks"] and "UserPromptSubmit" in data["hooks"]
+        capsys.readouterr()
+
+        assert run(vault, "hooks", "install", "--host", "grok") == 0
+        assert "(already installed)" in capsys.readouterr().out
+
+    def test_plugin_only_hosts_point_to_show(self, vault, capsys):
+        for host in ("opencode", "amp"):
+            assert run(vault, "hooks", "install", "--host", host) == 2
+            assert f"hooks show --host {host}" in capsys.readouterr().out
+
+    def test_show_prints_per_host_snippets(self, vault, capsys):
         assert run(vault, "hooks", "show", "--host", "claude") == 0
         out = capsys.readouterr().out
         assert "SessionStart" in out and "marvin hook session-start" in out
+
+        assert run(vault, "hooks", "show", "--host", "codex") == 0
+        assert ".codex/hooks.json" in capsys.readouterr().out
+
+        assert run(vault, "hooks", "show", "--host", "grok") == 0
+        assert ".grok/hooks/marvin.json" in capsys.readouterr().out
+
+        assert run(vault, "hooks", "show", "--host", "opencode") == 0
+        out = capsys.readouterr().out
+        assert "experimental.chat.system.transform" in out and "WARNING" in out
+
+        assert run(vault, "hooks", "show", "--host", "amp") == 0
+        out = capsys.readouterr().out
+        assert "agent.start" in out and "@ampcode/plugin" in out

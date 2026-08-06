@@ -754,34 +754,41 @@ def cmd_hook_user_prompt(service: MarvinService, args: argparse.Namespace) -> in
         return 0
 
 
-_CLAUDE_HOOK_EVENTS: tuple[tuple[str, str], ...] = (
-    ("SessionStart", "marvin hook session-start"),
-    ("UserPromptSubmit", "marvin hook user-prompt"),
+# Hook wiring per host (verified against mid-2026 docs). Claude Code, Codex
+# CLI, and Grok Build share the same 3-level schema (event -> matcher-group ->
+# handler array) and the same contract: hook reads JSON on stdin, plain stdout
+# on exit 0 is injected into model context. OpenCode and Amp have no shell
+# hooks — only TypeScript plugin APIs — so `install` defers to `show` there.
+_HOOK_EVENTS: tuple[tuple[str, str, int], ...] = (
+    ("SessionStart", "marvin hook session-start", 30),
+    ("UserPromptSubmit", "marvin hook user-prompt", 10),
 )
 
 
-def cmd_hooks_install(service: MarvinService | None, args: argparse.Namespace) -> int:
+def _hook_config() -> dict:
+    return {
+        "hooks": {
+            event: [{"hooks": [{"type": "command", "command": command, "timeout": timeout}]}]
+            for event, command, timeout in _HOOK_EVENTS
+        }
+    }
+
+
+def _merge_hook_config(path: Path) -> list[str]:
+    """Idempotently merge the marvin hook entries into a shared JSON config.
+
+    Never touches unrelated keys or other tools' hooks; raises (and leaves the
+    file untouched) if the existing JSON does not parse.
+    """
     import json
 
-    if args.host != "claude":
-        _print(
-            encode_error(
-                "usage",
-                f"automatic install for '{args.host}' is not wired yet; "
-                f"run `marvin hooks show --host {args.host}` for manual setup",
-            )
-        )
-        return 2
-
-    base = Path.home() / ".claude" if args.user else Path.cwd() / ".claude"
-    path = base / "settings.json"
     data: dict = {}
     if path.exists():
         data = json.loads(path.read_text(encoding="utf-8") or "{}")
 
     hooks = data.setdefault("hooks", {})
     added: list[str] = []
-    for event, command in _CLAUDE_HOOK_EVENTS:
+    for event, command, timeout in _HOOK_EVENTS:
         entries = hooks.setdefault(event, [])
         already = any(
             hook.get("command", "").startswith("marvin hook")
@@ -791,54 +798,137 @@ def cmd_hooks_install(service: MarvinService | None, args: argparse.Namespace) -
             if isinstance(hook, dict)
         )
         if not already:
-            entries.append({"hooks": [{"type": "command", "command": command}]})
+            entries.append({"hooks": [{"type": "command", "command": command, "timeout": timeout}]})
             added.append(event)
 
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+    return added
+
+
+def cmd_hooks_install(service: MarvinService | None, args: argparse.Namespace) -> int:
+    import json
+
+    host = args.host
+    hints: list[tuple[str, str]] = [
+        ("marvin hook session-start", "dry-run what gets injected at session start"),
+        ('echo \'{"prompt":"..."}\' | marvin hook user-prompt', "dry-run prompt recall"),
+    ]
+
+    if host == "claude":
+        base = Path.home() / ".claude" if args.user else Path.cwd() / ".claude"
+        path = base / "settings.json"
+        added = _merge_hook_config(path)
+    elif host == "codex":
+        base = Path.home() / ".codex" if args.user else Path.cwd() / ".codex"
+        path = base / "hooks.json"
+        added = _merge_hook_config(path)
+        if not args.user:
+            hints.append(("/hooks", "trust these project hooks inside Codex CLI (one-time)"))
+    elif host == "grok":
+        # Grok reads every JSON file under .grok/hooks/ — marvin owns its own
+        # file there, so install is a plain (re)write, naturally idempotent.
+        base = Path.home() / ".grok" if args.user else Path.cwd() / ".grok"
+        path = base / "hooks" / "marvin.json"
+        rendered = json.dumps(_hook_config(), indent=2) + "\n"
+        existed = path.exists() and path.read_text(encoding="utf-8") == rendered
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(rendered, encoding="utf-8")
+        added = [] if existed else [event for event, _, _ in _HOOK_EVENTS]
+        if not args.user:
+            hints.append(("/hooks-trust", "trust these project hooks inside Grok Build (one-time)"))
+    else:
+        _print(
+            encode_error(
+                "usage",
+                f"'{host}' has no shell-command hook mechanism (TypeScript plugin API only); "
+                f"run `marvin hooks show --host {host}` for the plugin template",
+            )
+        )
+        return 2
+
     _print(
         encode_kv(
             "hooks",
             {
-                "host": args.host,
+                "host": host,
                 "path": str(path),
                 "added": ", ".join(added) if added else "(already installed)",
             },
         ),
-        encode_help(
-            [
-                ("marvin hook session-start", "dry-run what gets injected at session start"),
-                ('echo \'{"prompt":"..."}\' | marvin hook user-prompt', "dry-run prompt recall"),
-            ]
-        ),
+        encode_help(hints),
     )
     return 0
+
+
+_OPENCODE_PLUGIN = """\
+# opencode has no shell-command hooks; per-prompt injection needs a TS plugin.
+# WARNING: `experimental.chat.system.transform` is experimental and has been
+# version-fragile (mutations silently discarded in some releases) — verify
+# after opencode upgrades. Save as .opencode/plugins/marvin-memory.ts:
+
+export const MarvinMemoryPlugin = async ({ $ }) => {
+  return {
+    "experimental.chat.system.transform": async (input, output) => {
+      const result = await $`marvin hook session-start`.quiet()
+      const text = result.text().trim()
+      if (text) output.system.push(`<marvin-memory>\\n${text}\\n</marvin-memory>`)
+    },
+  }
+}
+
+# Static alternative (robust): pre-generate context into a file the config
+# loads at session init, e.g. via your shell profile or a cron:
+#   marvin hook session-start > .opencode/marvin-context.md
+# and list it under the `instructions` key in opencode.json."""
+
+_AMP_PLUGIN = """\
+# Amp's declarative amp.hooks cannot run shell commands; context injection
+# needs a TypeScript plugin. Save as .amp/plugins/marvin-memory.ts:
+
+import type { PluginAPI } from '@ampcode/plugin'
+
+export default function (amp: PluginAPI) {
+  let sessionContext: string | null = null
+
+  amp.on('session.start', async () => {
+    const result = await amp.$`marvin hook session-start`
+    sessionContext = result.stdout.trim() || null
+  })
+
+  amp.on('agent.start', async (event, ctx) => {
+    const result = await ctx.$`marvin hook user-prompt ${event.prompt ?? ''}`
+    let content = result.stdout.trim()
+    if (sessionContext) {
+      content = [sessionContext, content].filter(Boolean).join('\\n')
+      sessionContext = null
+    }
+    if (content) return { message: { content, display: false } }
+  })
+}"""
 
 
 def cmd_hooks_show(service: MarvinService | None, args: argparse.Namespace) -> int:
     import json
 
-    if args.host == "claude":
-        snippet = {
-            "hooks": {
-                event: [{"hooks": [{"type": "command", "command": command}]}]
-                for event, command in _CLAUDE_HOOK_EVENTS
-            }
-        }
-        print("# merge into .claude/settings.json (or ~/.claude/settings.json):")
-        print(json.dumps(snippet, indent=2))
+    host = args.host
+    if host in ("claude", "codex", "grok"):
+        target = {
+            "claude": ".claude/settings.json (or ~/.claude/settings.json)",
+            "codex": ".codex/hooks.json (or ~/.codex/hooks.json; TOML config.toml also works)",
+            "grok": ".grok/hooks/marvin.json (or ~/.grok/hooks/marvin.json)",
+        }[host]
+        print(f"# {host}: merge into {target}")
+        print(f"# (or just run: marvin hooks install --host {host})")
+        print(json.dumps(_hook_config(), indent=2))
         return 0
-    print(
-        f"# {args.host}: no native stdout-injection hook contract is wired yet.\n"
-        f"# Fallbacks that work everywhere:\n"
-        f"#   marvin skill install --target <skills-dir>   # the marvin-memory skill\n"
-        f"#   marvin serve --transport stdio               # MCP server (all 20 tools)\n"
-        f"# The hook commands themselves are host-agnostic — wire any mechanism\n"
-        f"# that runs a shell command and injects its stdout:\n"
-        f"#   marvin hook session-start\n"
-        f"#   marvin hook user-prompt   (reads {{'prompt': ...}} JSON on stdin)"
-    )
-    return 0
+    if host == "opencode":
+        print(_OPENCODE_PLUGIN)
+        return 0
+    if host == "amp":
+        print(_AMP_PLUGIN)
+        return 0
+    return _usage_error(f"unknown host: {host}")
 
 
 def cmd_consolidate(service: MarvinService, args: argparse.Namespace) -> int:

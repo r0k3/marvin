@@ -51,8 +51,23 @@ What gets injected (budgeted, ~2000 / ~1000 chars, tunable via
 
 Hooks always exit 0 — a broken vault never breaks a session. Dry-run them
 any time: `marvin hook session-start`, or
-`echo '{"prompt":"..."}' | marvin hook user-prompt`. For other hosts,
-`marvin hooks show --host <h>` prints what to wire manually.
+`echo '{"prompt":"..."}' | marvin hook user-prompt`.
+
+**Host support** (`marvin hooks install --host <h>`, verified mid-2026):
+
+| Host | Support | Mechanism | Note |
+|---|---|---|---|
+| Claude Code | full | `.claude/settings.json` hooks | |
+| Codex CLI | full | `.codex/hooks.json` | trust project hooks once via `/hooks` |
+| Grok Build | full | `.grok/hooks/marvin.json` | trust once via `/hooks-trust` |
+| OpenCode | manual | TypeScript plugin (experimental API) | `marvin hooks show --host opencode` |
+| Amp | manual | TypeScript plugin | `marvin hooks show --host amp` |
+
+Claude Code, Codex CLI, and Grok Build share the same hook contract (JSON
+payload on stdin, plain stdout injected on exit 0), so one `marvin hook`
+command serves all three. OpenCode and Amp expose only TypeScript plugin
+APIs — `hooks show` prints ready-to-save plugin templates, with an
+explicit fragility warning for OpenCode's experimental hook.
 
 ### Starting the Local MCP Gateway
 
