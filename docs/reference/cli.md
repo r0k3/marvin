@@ -72,7 +72,7 @@ agent *when* to act on what the dashboard shows. For Claude Code:
 | `marvin search <query...> [--kind k] [--limit n] [--fields ...]` | Hybrid recall (keyword + vector + entity graph, rank-fused) |
 | `marvin recent [--kind k] [--limit n]` | Most recent memories |
 | `marvin read <identifier> [--full]` | One note by title, alias, or path — structured facts + body |
-| `marvin remember <concept> [content] --predicate p --value v [--aspect a] [--confidence c]` | Store a semantic fact; same-predicate updates soft-deprecate the old value |
+| `marvin remember <concept> [content] --predicate p --value v [--aspect a] [--confidence c] [--reason r]` | Store a semantic fact; same-predicate updates soft-deprecate the old value, with `--reason` recorded on the replaced fact |
 | `marvin procedure <title> --step s [--step s2 ...] [--applies ...] [--avoid ...]` | Store a procedure/rule |
 | `marvin template register <title> --plan s [--intent i] [--style ...] [--entity-type ...] [--trigger ...] [--slot ...] [--failure ...]` | Register a K-line response strategy |
 | `marvin template match [context...] [--intent i] [--top-k n]` | Select templates (weighted trigger scoring; intent is a hard gate) |
@@ -84,6 +84,9 @@ agent *when* to act on what the dashboard shows. For Claude Code:
 | `marvin sync` / `marvin rebuild` / `marvin check` | Index maintenance (vault is authoritative; `check` exits 1 on drift) |
 | `marvin health` | Runtime snapshot: backends, GPU, paths |
 | `marvin doctor` | Read-only install-state checkup; every missing component paired with its exact fix command |
+| `marvin hook session-start` / `marvin hook user-prompt` | Auto-recall payloads for host hooks (budgeted stdout; embedder-free / lexical-only, ~0.4 s; always exit 0) |
+| `marvin hooks install [--host claude] [--user]` | Idempotently wire the auto-recall hooks into the host's config |
+| `marvin hooks show [--host h]` | Print the hook config snippet for manual setup |
 | `marvin consolidate [--model m] [--api-base u]` | Full sleep pass now, synchronously (entity extraction → episodic → semantic → reflective) |
 | `marvin worktree start <branch>` / `marvin worktree merge <branch>` | Branch memory for risky work |
 | `marvin skill show` | Print the bundled `marvin-memory` agent skill (paste into any harness) |

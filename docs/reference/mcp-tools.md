@@ -39,6 +39,7 @@ Stores a durable piece of architectural knowledge, user preference, or fact.
 * `content` (str, optional): Easy path for an unstructured fact.
 * `predicate` (str, optional): Stable property name for structured facts.
 * `value` (str, optional): Structured fact value. If omitted, `content` is used.
+* `reason` (str, optional): Why the previous value is being replaced — recorded as `deprecated_reason` on the fact this write soft-deprecates (use for user corrections).
 * `aspect` (str, optional): One of `knowledge`, `preference`, `decision`, `goal`, `problem`, `belief`, or `directive` (default: `knowledge`).
 * `confidence` (float, optional): 0.0–1.0 confidence score (default: 0.6).
 * `tags` (list[str], optional): e.g. `["python", "best-practice"]`

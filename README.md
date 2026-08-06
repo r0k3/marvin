@@ -49,6 +49,7 @@ Biological memory is *consolidated* during sleep. Marvin's background **Brain Wo
 - **Computational Sleep** — two-phase consolidation using local open-weight models (default `qwen3.6:35b-a3b-q4_K_M` via Ollama); runs on demand, in the background of the serve process, or via the optional worker cluster. The vault's `extracted`/`consolidated` flags are the durable work queue.
 - **Hybrid Retrieval** — three-stream Reciprocal Rank Fusion (SQLite FTS5 + `sqlite-vec` dense vectors + IDF-weighted entity graph), optional `bge-reranker-v2-m3` cross-encoder (int8 on CPU, fp16 on GPU), and opt-in time-aware freshness decay.
 - **MCP Gateway** — 20 tools (the full service surface) over SSE (port 8421) or stdio; plugs into any MCP-compatible agent.
+- **Auto-Recall Hooks** — `marvin hooks install` wires session-start and per-prompt memory injection into the host agent (~0.4 s, char-budgeted, lexical-only on the prompt path); a deterministic **correction detector** nudges the agent to persist user corrections with an audited `--reason` deprecation trail.
 - **AXI CLI** — the same functionality as an [axi.md](https://axi.md/)-style command line: token-efficient TOON output, a live dashboard on bare `marvin`, `help[]` next-step hints, structured errors. Built for agents driving a shell, pleasant for humans.
 - **Reproducible Benchmark** — built-in LongMemEval-S harness for retrieval *and* end-to-end QA, so memory changes are measured, not vibed.
 

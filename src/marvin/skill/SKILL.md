@@ -19,7 +19,7 @@ CLI (shown second). Parameter details: tool descriptions / `marvin --help`.
 |---|---|---|
 | Durable fact, preference, or decision ("we use X", "never do Y") | semantic fact | `marvin_remember_semantic` / `marvin remember <concept> --predicate <p> --value <v> --aspect <a> --confidence <c>` |
 | Workflow rule ("always run X before Y") | procedure | `marvin_store_procedure` / `marvin procedure <title> --step <s> ...` |
-| Correction of an earlier fact ("actually it's Z now") | the SAME concept + predicate again with the new value — the old one soft-deprecates automatically; never edit or delete | same as fact |
+| Correction of an earlier fact ("actually it's Z now") | the SAME concept + predicate again with the new value — the old one soft-deprecates automatically; never edit or delete | same as fact, adding `--reason "user correction: <what changed>"` |
 | Notable work completed (bug fixed, feature shipped, incident resolved) | episode | `marvin_log_episode` / `marvin episode <title> --summary <s>` |
 | A transferable lesson inside that work (root cause, gotcha, principle) | reflection, in addition to the episode | `marvin_reflect` / `marvin reflect <title> --insight <i>` |
 | A response strategy that proved reusable | K-line template | `marvin_register_template` / `marvin template register <title> --plan <step> --intent <i> --trigger <phrase>` |
@@ -30,6 +30,10 @@ problem / belief) and `confidence`: categorical statements ("no exceptions",
 
 Do not store: scheduling ephemera, secrets or credentials, or anything the
 code and git history already record.
+
+Writes made inside a git repository are auto-tagged `project/<owner>-<repo>`.
+The vault is global on purpose — include that tag text in a search query
+when you specifically want this project's memories.
 
 ## Recall before you answer
 
@@ -46,6 +50,17 @@ reading the template note directly) is what lets effective strategies
 outrank stale ones. Intents are short labels (`debug`, `biography`,
 `recall`), not sentences; on zero matches, retry with a simpler intent or
 none before falling back to reading procedures directly.
+
+## Injected auto-recall (when hooks are installed)
+
+Context blocks starting `marvin-memory auto-recall` (session start) or
+`marvin-memory recall:` (per prompt) are Marvin surfacing stored memory
+automatically — treat them as recall you already performed: use them
+directly and don't re-search for the same items. A line starting
+`memory: possible correction` means the user's message matched a
+correction cue: finish resolving the task, then persist the fix as a
+semantic fact with `--reason "user correction"` so the old value keeps an
+audited deprecation trail.
 
 ## Close the loop — the most-missed step
 

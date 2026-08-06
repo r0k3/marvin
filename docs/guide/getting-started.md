@@ -25,6 +25,35 @@ At any point, `marvin doctor` reports the install state of every component
 (embedder, GPU, extras, sleep endpoint, skill) with the exact command that
 fixes anything missing.
 
+### Auto-recall hooks (memory without asking)
+
+By default, memory only works when the agent chooses to call a tool. The
+auto-recall hooks remove that dependency — the host runs a fast `marvin`
+command at session start and on each user prompt, and its stdout is
+injected into the agent's context:
+
+```bash
+marvin hooks install --host claude          # project (.claude/settings.json)
+marvin hooks install --host claude --user   # user-level (~/.claude/settings.json)
+```
+
+What gets injected (budgeted, ~2000 / ~1000 chars, tunable via
+`MARVIN_HOOK_SESSION_BUDGET_CHARS` / `MARVIN_HOOK_PROMPT_BUDGET_CHARS`):
+
+- **Session start** — your highest-confidence facts (current project's
+  first, via the auto `project/<owner>-<repo>` tag) and recent episodes.
+  Embedder-free, so it costs ~0.4 s.
+- **Each user prompt** — lexical recall (FTS + entity graph; the dense
+  stream is skipped so no model ever loads on this path) against the
+  prompt text, plus a nudge when the prompt matches a **correction cue**
+  ("no, actually…", "we no longer use…") so the agent persists the fix
+  with `marvin remember ... --reason "user correction"`.
+
+Hooks always exit 0 — a broken vault never breaks a session. Dry-run them
+any time: `marvin hook session-start`, or
+`echo '{"prompt":"..."}' | marvin hook user-prompt`. For other hosts,
+`marvin hooks show --host <h>` prints what to wire manually.
+
 ### Starting the Local MCP Gateway
 
 If your AI agent supports configuring MCP servers via standard I/O streams:
