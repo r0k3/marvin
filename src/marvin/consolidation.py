@@ -1,7 +1,12 @@
 import json
 import logging
 
-from litellm import completion
+from ._extras import require
+
+try:
+    from litellm import completion
+except ImportError:  # 'consolidate' extra not installed
+    completion = None  # type: ignore[assignment]
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +23,7 @@ class ConsolidationEngine:
         """
         if not episodes:
             return {"semantic": [], "procedural": []}
+        require("Consolidation", completion, "consolidate")
 
         prompt = f"""
 You are an AI agent's memory consolidation worker (computational sleep).
@@ -85,6 +91,7 @@ Raw Episodes:
         """
         if not episodes:
             return []
+        require("Consolidation", completion, "consolidate")
 
         known = "\n".join(f"- {fact}" for fact in (known_facts or [])) or "(none)"
         joined = "\n---\n".join(episodes)
@@ -140,6 +147,7 @@ Episodes mentioning "{entity}":
         """
         if not facts:
             return []
+        require("Consolidation", completion, "consolidate")
 
         listed = "\n".join(f"- {fact}" for fact in facts)
         prompt = f"""

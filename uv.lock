@@ -454,22 +454,6 @@ wheels = [
 ]
 
 [[package]]
-name = "fastapi"
-version = "0.135.2"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "annotated-doc" },
-    { name = "pydantic" },
-    { name = "starlette" },
-    { name = "typing-extensions" },
-    { name = "typing-inspection" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/c4/73/5903c4b13beae98618d64eb9870c3fac4f605523dd0312ca5c80dadbd5b9/fastapi-0.135.2.tar.gz", hash = "sha256:88a832095359755527b7f63bb4c6bc9edb8329a026189eed83d6c1afcf419d56", size = 395833, upload-time = "2026-03-23T14:12:41.697Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/8f/ea/18f6d0457f9efb2fc6fa594857f92810cadb03024975726db6546b3d6fcf/fastapi-0.135.2-py3-none-any.whl", hash = "sha256:0af0447d541867e8db2a6a25c23a8c4bd80e2394ac5529bd87501bbb9e240ca5", size = 117407, upload-time = "2026-03-23T14:12:43.284Z" },
-]
-
-[[package]]
 name = "fastembed"
 version = "0.8.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1207,26 +1191,27 @@ wheels = [
 ]
 
 [[package]]
-name = "marvin"
-version = "0.3.0"
+name = "marvin-memory"
+version = "0.4.0"
 source = { editable = "." }
 dependencies = [
-    { name = "fastapi" },
     { name = "fastembed" },
     { name = "gitpython" },
-    { name = "langextract" },
-    { name = "litellm" },
     { name = "mcp" },
-    { name = "nats-py" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
     { name = "pyyaml" },
     { name = "sqlite-vec" },
-    { name = "uvicorn" },
-    { name = "watchdog" },
 ]
 
 [package.optional-dependencies]
+cluster = [
+    { name = "nats-py" },
+]
+consolidate = [
+    { name = "langextract" },
+    { name = "litellm" },
+]
 gpu = [
     { name = "nvidia-cublas-cu12" },
     { name = "nvidia-cuda-nvrtc-cu12" },
@@ -1250,13 +1235,12 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "fastapi", specifier = ">=0.135.2" },
     { name = "fastembed", specifier = ">=0.8.0" },
     { name = "gitpython", specifier = ">=3.1.46" },
-    { name = "langextract", specifier = ">=1.2.0" },
-    { name = "litellm" },
-    { name = "mcp", specifier = ">=1.26.0" },
-    { name = "nats-py", specifier = ">=2.14.0" },
+    { name = "langextract", marker = "extra == 'consolidate'", specifier = ">=1.2.0" },
+    { name = "litellm", marker = "extra == 'consolidate'" },
+    { name = "mcp", specifier = ">=1.26.0,<2" },
+    { name = "nats-py", marker = "extra == 'cluster'", specifier = ">=2.14.0" },
     { name = "nvidia-cublas-cu12", marker = "extra == 'gpu'" },
     { name = "nvidia-cuda-nvrtc-cu12", marker = "extra == 'gpu'" },
     { name = "nvidia-cuda-runtime-cu12", marker = "extra == 'gpu'" },
@@ -1269,10 +1253,8 @@ requires-dist = [
     { name = "pydantic-settings", specifier = ">=2.13.1" },
     { name = "pyyaml", specifier = ">=6.0.3" },
     { name = "sqlite-vec", specifier = ">=0.1.7" },
-    { name = "uvicorn", specifier = ">=0.42.0" },
-    { name = "watchdog", specifier = ">=6.0.0" },
 ]
-provides-extras = ["gpu"]
+provides-extras = ["consolidate", "cluster", "gpu"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -2934,8 +2916,8 @@ name = "uvicorn"
 version = "0.42.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "click" },
-    { name = "h11" },
+    { name = "click", marker = "sys_platform != 'emscripten'" },
+    { name = "h11", marker = "sys_platform != 'emscripten'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/e3/ad/4a96c425be6fb67e0621e62d86c402b4a17ab2be7f7c055d9bd2f638b9e2/uvicorn-0.42.0.tar.gz", hash = "sha256:9b1f190ce15a2dd22e7758651d9b6d12df09a13d51ba5bf4fc33c383a48e1775", size = 85393, upload-time = "2026-03-16T06:19:50.077Z" }
 wheels = [

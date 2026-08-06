@@ -32,7 +32,12 @@ import logging
 import threading
 from collections.abc import Sequence
 
-from litellm import completion
+from .._extras import require
+
+try:
+    from litellm import completion
+except ImportError:  # 'consolidate' extra not installed
+    completion = None  # type: ignore[assignment]
 from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
@@ -186,6 +191,7 @@ class ReaderEngine:
         question_date: str = "",
     ) -> ReaderResult:
         """Generate an answer for ``question`` from a pre-built ``context``."""
+        require("The QA reader", completion, "consolidate")
         prompt = _build_prompt(question, context, question_date)
         extra: dict[str, object] = {}
         # Disable hidden reasoning on local Qwen3 (ollama) -- see __init__.

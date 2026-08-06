@@ -27,7 +27,12 @@ from __future__ import annotations
 
 import logging
 
-from litellm import completion
+from .._extras import require
+
+try:
+    from litellm import completion
+except ImportError:  # 'consolidate' extra not installed
+    completion = None  # type: ignore[assignment]
 
 logger = logging.getLogger(__name__)
 
@@ -170,6 +175,7 @@ class Judge:
         if self.model.startswith("ollama/"):
             extra["think"] = False
             max_tokens = 16
+        require("The LLM judge", completion, "consolidate")
         try:
             response = completion(
                 model=self.model,
