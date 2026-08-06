@@ -424,7 +424,7 @@ class MemoryIndex:
     def hybrid_search(
         self,
         query: str,
-        query_embedding: np.ndarray,
+        query_embedding: np.ndarray | None,
         limit: int,
         kind: MemoryKind | None = None,
         *,
@@ -459,8 +459,15 @@ class MemoryIndex:
             limit * self.first_stage_overfetch,
             self.first_stage_overfetch_min,
         )
-        vec_hits = self._vector_hits(
-            query_embedding=query_embedding, limit=per_stream_limit, kind=kind
+        # ``query_embedding=None`` skips the dense stream entirely (lexical
+        # mode): FTS + graph still fuse, and no embedding model ever loads —
+        # the latency contract per-prompt hooks depend on.
+        vec_hits = (
+            []
+            if query_embedding is None
+            else self._vector_hits(
+                query_embedding=query_embedding, limit=per_stream_limit, kind=kind
+            )
         )
         fts_hits = self._fts_hits(query=query, limit=per_stream_limit, kind=kind)
 

@@ -129,6 +129,7 @@ def create_app(settings: MarvinSettings) -> FastMCP:
         confidence: float = 0.6,
         tags: list[str] | None = None,
         links: list[str] | None = None,
+        reason: str | None = None,
     ) -> MemoryWriteResult:
         return service.remember_semantic(
             concept=concept,
@@ -140,6 +141,7 @@ def create_app(settings: MarvinSettings) -> FastMCP:
             tags=tags,
             links=links,
             source={"tool": "marvin_remember_semantic"},
+            reason=reason,
         )
 
     @app.tool(

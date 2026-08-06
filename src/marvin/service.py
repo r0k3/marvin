@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
+from functools import cached_property
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -214,11 +215,19 @@ class MarvinService:
         )
 
     def search(
-        self, query: str, *, kind: MemoryKind | None = None, limit: int | None = None
+        self,
+        query: str,
+        *,
+        kind: MemoryKind | None = None,
+        limit: int | None = None,
+        lexical_only: bool = False,
     ) -> list[SearchHit]:
+        """Hybrid recall. ``lexical_only`` skips the dense stream (and the
+        embedding-model load with it) — FTS + entity graph still fuse; used
+        by latency-bound callers like the per-prompt hook."""
         self.sync()
         effective_limit = limit or self.settings.search_limit
-        query_embedding = self.embedder.embed_text(query)
+        query_embedding = None if lexical_only else self.embedder.embed_text(query)
         return self._search_pool(
             query=query,
             query_embedding=query_embedding,
@@ -230,7 +239,7 @@ class MarvinService:
         self,
         *,
         query: str,
-        query_embedding: np.ndarray,
+        query_embedding: np.ndarray | None,
         kind: MemoryKind | None,
         limit: int,
     ) -> list[SearchHit]:
@@ -291,6 +300,7 @@ class MarvinService:
         tags: list[str] | None = None,
         links: list[str] | None = None,
         source: dict[str, object] | None = None,
+        reason: str | None = None,
     ) -> MemoryWriteResult:
         value_text = (value if value is not None else content or "").strip()
         if not value_text:
@@ -327,7 +337,10 @@ class MarvinService:
                     fact.predicate
                 ) == self._normalize_fact_predicate(new_fact.predicate):
                     fact.deprecate(
-                        reason=(f"Replaced by newer fact with the same predicate for {concept}."),
+                        reason=(
+                            reason
+                            or f"Replaced by newer fact with the same predicate for {concept}."
+                        ),
                         replaced_by=new_fact.id,
                     )
             facts.append(new_fact)
@@ -536,6 +549,26 @@ class MarvinService:
             source=source,
             existing_path=existing.path if existing else None,
         )
+
+    @cached_property
+    def project_tag(self) -> str | None:
+        """Auto-tag for writes, derived once from the process working directory.
+
+        ``None`` when disabled, outside a git repo, or when the process runs
+        inside the vault itself (the cluster worker) — the vault's own repo is
+        not a "project".
+        """
+        if not self.settings.auto_project_tag:
+            return None
+        from .project import repo_tag
+
+        cwd = Path.cwd()
+        try:
+            if cwd.resolve().is_relative_to(self.settings.resolved_vault_path):
+                return None
+        except (OSError, ValueError):
+            return None
+        return repo_tag(cwd)
 
     def _default_engine(self) -> ConsolidationEngine:
         from .consolidation import ConsolidationEngine
@@ -859,6 +892,8 @@ class MarvinService:
         existing_path: Path | None = None,
         unique: bool = False,
     ) -> MemoryWriteResult:
+        if self.project_tag and self.project_tag not in (tags or []):
+            tags = [*(tags or []), self.project_tag]
         path, created = self.vault.write_note(
             kind=kind,
             title=title,

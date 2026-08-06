@@ -37,6 +37,19 @@ class MarvinSettings(BaseSettings):
     sleep_model: str = Field(default="ollama/qwen3.6:35b-a3b-q4_K_M")
     sleep_api_base: str | None = Field(default=None)
 
+    # The vault is user/agent-global; tags are how recall narrows. When the
+    # process runs inside a git repository, writes are auto-tagged
+    # ``project/<slug>`` (slug from the origin remote, so clones share it).
+    # Disabled automatically when the process runs inside the vault itself
+    # (e.g. the cluster worker).
+    auto_project_tag: bool = Field(default=True)
+
+    # Character budgets for the auto-recall hooks (`marvin hook ...`).
+    # Values follow PlugMem's measured-useful caps: enough to orient the
+    # agent, small enough never to crowd the context window.
+    hook_session_budget_chars: int = Field(default=2000, ge=200)
+    hook_prompt_budget_chars: int = Field(default=1000, ge=100)
+
     embedding_provider: Literal["auto", "fastembed", "hash"] = Field(default="auto")
     embedding_model: str = Field(default="BAAI/bge-small-en-v1.5")
     embedding_dimensions: int = Field(default=384)

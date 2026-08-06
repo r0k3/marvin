@@ -252,6 +252,7 @@ def cmd_remember(service: MarvinService, args: argparse.Namespace) -> int:
         tags=_split_csv(args.tags),
         links=_split_csv(args.links),
         source={"tool": "cli"},
+        reason=args.reason,
     )
     _print(
         encode_table("stored", [_write_result_row(result)], ["title", "kind", "path", "created"]),
@@ -635,6 +636,213 @@ def cmd_doctor(service: MarvinService | None, args: argparse.Namespace) -> int:
     return 0
 
 
+# ---------------------------------------------------------------------------
+# Auto-recall hooks (`marvin hook ...`): fast, budgeted, never blocking.
+# Stdout is injected into the host agent's context (exit 0); errors go to
+# stderr and the hook still exits 0 so a broken vault never breaks a session.
+# ---------------------------------------------------------------------------
+
+
+def _read_hook_stdin() -> dict[str, object]:
+    """Parse the host's hook payload from stdin, tolerating anything.
+
+    Returns ``{}`` on a TTY or empty input. Non-JSON input is preserved as
+    ``{"text": ...}`` so hosts that pipe the raw prompt text still work.
+    """
+    import json
+
+    if sys.stdin.isatty():
+        return {}
+    raw = sys.stdin.read()
+    if not raw.strip():
+        return {}
+    try:
+        data = json.loads(raw)
+    except ValueError:
+        return {"text": raw.strip()}
+    return data if isinstance(data, dict) else {"text": str(data)}
+
+
+def _clip_lines(lines: list[str], budget: int) -> list[str]:
+    """Keep whole leading lines within a character budget (newlines counted)."""
+    out: list[str] = []
+    used = 0
+    for line in lines:
+        cost = len(line) + 1
+        if used + cost > budget:
+            break
+        out.append(line)
+        used += cost
+    return out
+
+
+def cmd_hook_session_start(service: MarvinService, args: argparse.Namespace) -> int:
+    try:
+        payload = _read_hook_stdin()
+        if payload.get("source") == "resume":
+            return 0  # context is intact on resume; re-injecting duplicates
+        budget = args.budget_chars or service.settings.hook_session_budget_chars
+        project = service.project_tag
+
+        lines = ["marvin-memory auto-recall (session start):"]
+        if project:
+            lines.append(f"  project: {project}")
+
+        # Embedder-free by design: vault listings only, so this hook stays
+        # fast even on a cold cache. Project-tagged facts first, then by
+        # confidence and recency.
+        entries: list[tuple[tuple[int, float, float], str]] = []
+        for note in service.vault.list_notes(MemoryKind.SEMANTIC):
+            tagged = 0 if (project and project in note.metadata.tags) else 1
+            for fact in note.metadata.facts:
+                if fact.deprecated:
+                    continue
+                entries.append(
+                    (
+                        (tagged, -fact.confidence, -fact.created_at.timestamp()),
+                        f"  fact: {fact.subject} {fact.predicate}: {fact.value}",
+                    )
+                )
+        lines += [line for _, line in sorted(entries)[:24]]
+        lines += [f"  recent: {hit.title} ({hit.kind.value})" for hit in service.recent(limit=3)]
+
+        use = (
+            "  use: marvin search <q> to recall; marvin remember <concept>"
+            " --predicate <p> --value <v> to store"
+        )
+        clipped = _clip_lines(lines, max(budget - len(use) - 1, 0))
+        clipped.append(use)
+        print("\n".join(clipped))
+        return 0
+    except Exception as exc:  # never break the host session
+        print(f"marvin hook error: {exc}", file=sys.stderr)
+        return 0
+
+
+def cmd_hook_user_prompt(service: MarvinService, args: argparse.Namespace) -> int:
+    try:
+        payload = _read_hook_stdin()
+        prompt = str(payload.get("prompt") or payload.get("text") or " ".join(args.query or []))
+        prompt = prompt.strip()
+        if len(prompt) < 16 or prompt.startswith("/"):
+            return 0
+        budget = args.budget_chars or service.settings.hook_prompt_budget_chars
+
+        from .promotion import detect_correction
+
+        lines: list[str] = []
+        signals = detect_correction(prompt)
+        if signals:
+            lines.append(
+                f"memory: possible correction ({', '.join(signals)}) — once resolved, "
+                'persist it: marvin remember "<concept>" --predicate <p> --value <new> '
+                '--reason "user correction" (the old value is auto-deprecated)'
+            )
+
+        # Lexical-only recall: FTS + entity graph, no embedding-model load —
+        # this runs on every prompt, so latency is the contract.
+        hits = service.search(prompt, lexical_only=True, limit=4)
+        if hits:
+            lines.append("marvin-memory recall:")
+            for hit in hits:
+                excerpt = (hit.excerpt or "").replace("\n", " ").strip()[:160]
+                lines.append(f"  {hit.title} ({hit.kind.value}): {excerpt}")
+
+        if lines:
+            print("\n".join(_clip_lines(lines, budget)))
+        return 0
+    except Exception as exc:  # never break the host session
+        print(f"marvin hook error: {exc}", file=sys.stderr)
+        return 0
+
+
+_CLAUDE_HOOK_EVENTS: tuple[tuple[str, str], ...] = (
+    ("SessionStart", "marvin hook session-start"),
+    ("UserPromptSubmit", "marvin hook user-prompt"),
+)
+
+
+def cmd_hooks_install(service: MarvinService | None, args: argparse.Namespace) -> int:
+    import json
+
+    if args.host != "claude":
+        _print(
+            encode_error(
+                "usage",
+                f"automatic install for '{args.host}' is not wired yet; "
+                f"run `marvin hooks show --host {args.host}` for manual setup",
+            )
+        )
+        return 2
+
+    base = Path.home() / ".claude" if args.user else Path.cwd() / ".claude"
+    path = base / "settings.json"
+    data: dict = {}
+    if path.exists():
+        data = json.loads(path.read_text(encoding="utf-8") or "{}")
+
+    hooks = data.setdefault("hooks", {})
+    added: list[str] = []
+    for event, command in _CLAUDE_HOOK_EVENTS:
+        entries = hooks.setdefault(event, [])
+        already = any(
+            hook.get("command", "").startswith("marvin hook")
+            for entry in entries
+            if isinstance(entry, dict)
+            for hook in entry.get("hooks", [])
+            if isinstance(hook, dict)
+        )
+        if not already:
+            entries.append({"hooks": [{"type": "command", "command": command}]})
+            added.append(event)
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+    _print(
+        encode_kv(
+            "hooks",
+            {
+                "host": args.host,
+                "path": str(path),
+                "added": ", ".join(added) if added else "(already installed)",
+            },
+        ),
+        encode_help(
+            [
+                ("marvin hook session-start", "dry-run what gets injected at session start"),
+                ('echo \'{"prompt":"..."}\' | marvin hook user-prompt', "dry-run prompt recall"),
+            ]
+        ),
+    )
+    return 0
+
+
+def cmd_hooks_show(service: MarvinService | None, args: argparse.Namespace) -> int:
+    import json
+
+    if args.host == "claude":
+        snippet = {
+            "hooks": {
+                event: [{"hooks": [{"type": "command", "command": command}]}]
+                for event, command in _CLAUDE_HOOK_EVENTS
+            }
+        }
+        print("# merge into .claude/settings.json (or ~/.claude/settings.json):")
+        print(json.dumps(snippet, indent=2))
+        return 0
+    print(
+        f"# {args.host}: no native stdout-injection hook contract is wired yet.\n"
+        f"# Fallbacks that work everywhere:\n"
+        f"#   marvin skill install --target <skills-dir>   # the marvin-memory skill\n"
+        f"#   marvin serve --transport stdio               # MCP server (all 20 tools)\n"
+        f"# The hook commands themselves are host-agnostic — wire any mechanism\n"
+        f"# that runs a shell command and injects its stdout:\n"
+        f"#   marvin hook session-start\n"
+        f"#   marvin hook user-prompt   (reads {{'prompt': ...}} JSON on stdin)"
+    )
+    return 0
+
+
 def cmd_consolidate(service: MarvinService, args: argparse.Namespace) -> int:
     from .consolidation import ConsolidationEngine
 
@@ -772,6 +980,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--confidence", type=float, default=0.6)
     p.add_argument("--tags", help="comma-separated")
     p.add_argument("--links", help="comma-separated")
+    p.add_argument(
+        "--reason",
+        help="why the previous value is being replaced (recorded on the deprecated fact)",
+    )
     p.set_defaults(func=cmd_remember)
 
     p = sub.add_parser("procedure", help="Store a reusable procedure or rule")
@@ -854,6 +1066,39 @@ def build_parser() -> argparse.ArgumentParser:
     p.set_defaults(func=cmd_health)
     p = sub.add_parser("doctor", help="Install-state checkup with exact fix commands")
     p.set_defaults(func=cmd_doctor, needs_service=False)
+
+    hk = sub.add_parser(
+        "hook",
+        help="Auto-recall hook commands (fast, budgeted; wire via `marvin hooks install`)",
+    )
+    hk_sub = hk.add_subparsers(dest="hook_command", required=True)
+    p = hk_sub.add_parser("session-start", help="Print session-start memory context (stdout)")
+    p.add_argument("--budget-chars", type=int, default=None, dest="budget_chars")
+    p.set_defaults(func=cmd_hook_session_start)
+    p = hk_sub.add_parser(
+        "user-prompt", help="Print prompt-relevant recall (stdout; lexical-only, no model load)"
+    )
+    p.add_argument("query", nargs="*", help="prompt text (default: hook JSON on stdin)")
+    p.add_argument("--budget-chars", type=int, default=None, dest="budget_chars")
+    p.set_defaults(func=cmd_hook_user_prompt)
+
+    hks = sub.add_parser("hooks", help="Install or show host hook configuration")
+    hks_sub = hks.add_subparsers(dest="hooks_command", required=True)
+    p = hks_sub.add_parser("install", help="Wire the auto-recall hooks into a host's config")
+    p.add_argument(
+        "--host",
+        default="claude",
+        choices=["claude", "codex", "grok", "opencode", "amp"],
+    )
+    p.add_argument("--user", action="store_true", help="user-level config instead of project")
+    p.set_defaults(func=cmd_hooks_install, needs_service=False)
+    p = hks_sub.add_parser("show", help="Print the hook config snippet for manual setup")
+    p.add_argument(
+        "--host",
+        default="claude",
+        choices=["claude", "codex", "grok", "opencode", "amp"],
+    )
+    p.set_defaults(func=cmd_hooks_show, needs_service=False)
 
     p = sub.add_parser(
         "consolidate",
