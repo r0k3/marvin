@@ -23,6 +23,20 @@ class MarvinSettings(BaseSettings):
     port: int = Field(default=8421)
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = Field(default="INFO")
 
+    # Event bus. "memory" (default) dispatches events in-process — the
+    # single-process deployment needs nothing else, because the vault itself
+    # is the durable work queue. "nats" publishes to NATS JetStream so a
+    # separate Brain Worker consumes them (requires the ``cluster`` extra).
+    bus: Literal["memory", "nats"] = Field(default="memory")
+    nats_url: str = Field(default="nats://127.0.0.1:4222")
+
+    # Model used by the sleep pass (entity extraction feeds it; two-phase
+    # consolidation runs on it). Any litellm-supported model string works;
+    # ``sleep_api_base`` overrides the endpoint (e.g. a remote Ollama host).
+    # Requires the ``consolidate`` extra.
+    sleep_model: str = Field(default="ollama/qwen3.6:35b-a3b-q4_K_M")
+    sleep_api_base: str | None = Field(default=None)
+
     embedding_provider: Literal["auto", "fastembed", "hash"] = Field(default="auto")
     embedding_model: str = Field(default="BAAI/bge-small-en-v1.5")
     embedding_dimensions: int = Field(default=384)

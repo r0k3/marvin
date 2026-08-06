@@ -91,6 +91,7 @@ class VaultStore:
         existing_path: Path | None = None,
         unique: bool = False,
         consolidated: bool | None = None,
+        extracted: bool | None = None,
         usage_count: int | None = None,
         effectiveness: float | None = None,
     ) -> tuple[Path, bool]:
@@ -119,6 +120,8 @@ class VaultStore:
             metadata.facts = list(facts)
         if consolidated is not None:
             metadata.consolidated = consolidated
+        if extracted is not None:
+            metadata.extracted = extracted
         if usage_count is not None:
             metadata.usage_count = usage_count
         if effectiveness is not None:
@@ -143,6 +146,8 @@ class VaultStore:
         # frontmatter with ``consolidated: false``.
         if metadata.consolidated:
             frontmatter["consolidated"] = True
+        if metadata.extracted:
+            frontmatter["extracted"] = True
         # Adaptive template stats: persisted only once a template has been used.
         if metadata.usage_count or metadata.effectiveness:
             frontmatter["usage_count"] = metadata.usage_count
@@ -166,6 +171,7 @@ class VaultStore:
         source = frontmatter.get("source") or {}
         facts = self._parse_facts(frontmatter.get("facts"))
         consolidated = bool(frontmatter.get("consolidated", False))
+        extracted = bool(frontmatter.get("extracted", False))
         usage_count = int(frontmatter.get("usage_count", 0) or 0)
         try:
             effectiveness = float(frontmatter.get("effectiveness", 0.0) or 0.0)
@@ -186,6 +192,7 @@ class VaultStore:
             source=source,
             facts=facts,
             consolidated=consolidated,
+            extracted=extracted,
             usage_count=usage_count,
             effectiveness=effectiveness,
         )
@@ -203,6 +210,10 @@ class VaultStore:
     def unconsolidated_episodes(self) -> list[NoteRecord]:
         """Episodic notes not yet processed by the consolidation pass."""
         return [n for n in self.list_notes(MemoryKind.EPISODIC) if not n.metadata.consolidated]
+
+    def unextracted_notes(self) -> list[NoteRecord]:
+        """Notes of any kind not yet processed by the entity-extraction pass."""
+        return [n for n in self.list_notes() if not n.metadata.extracted]
 
     def mark_consolidated(self, path: Path, value: bool = True) -> None:
         """Flip a note's ``consolidated`` flag, preserving body/facts/metadata."""

@@ -484,28 +484,29 @@ def cmd_health(service: MarvinService, args: argparse.Namespace) -> int:
 def cmd_consolidate(service: MarvinService, args: argparse.Namespace) -> int:
     from .consolidation import ConsolidationEngine
 
-    engine_kwargs: dict[str, str] = {}
-    if args.model:
-        engine_kwargs["model"] = args.model
-    if args.api_base:
-        engine_kwargs["api_base"] = args.api_base
-    engine = ConsolidationEngine(**engine_kwargs)
-    facts = service.consolidate_semantic(engine=engine, min_episodes=args.min_episodes)
-    insights = service.consolidate_reflective(engine=engine, min_facts=args.min_facts)
+    engine = ConsolidationEngine(
+        model=args.model or service.settings.sleep_model,
+        api_base=args.api_base or service.settings.sleep_api_base,
+    )
+    report = service.sleep(engine=engine, min_episodes=args.min_episodes, min_facts=args.min_facts)
+    summary: dict[str, object] = {
+        "notes_linked": report.notes_linked,
+        "facts_extracted": len(report.facts),
+        "insights_created": len(report.insights),
+    }
+    if report.extraction_skipped:
+        summary["extraction_skipped"] = True
     _print(
-        encode_kv(
-            "consolidation",
-            {"facts_extracted": len(facts), "insights_created": len(insights)},
-        ),
+        encode_kv("sleep", summary),
         encode_table(
             "facts",
-            [_write_result_row(r) for r in facts],
+            [_write_result_row(r) for r in report.facts],
             ["title", "kind", "path", "created"],
             empty="no entity crossed the episode threshold",
         ),
         encode_table(
             "insights",
-            [_write_result_row(r) for r in insights],
+            [_write_result_row(r) for r in report.insights],
             ["title", "kind", "path", "created"],
             empty="no aspect group had enough facts",
         ),
@@ -698,7 +699,10 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("health", help="Runtime health snapshot")
     p.set_defaults(func=cmd_health)
 
-    p = sub.add_parser("consolidate", help="Run two-phase consolidation now (uses the local LLM)")
+    p = sub.add_parser(
+        "consolidate",
+        help="Run the sleep pass now: entity extraction + two-phase consolidation",
+    )
     p.add_argument("--model", help="LiteLLM model id override")
     p.add_argument("--api-base", dest="api_base")
     p.add_argument("--min-episodes", type=int, default=3, dest="min_episodes")

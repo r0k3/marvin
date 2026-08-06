@@ -2,12 +2,12 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import numpy as np
 
-from .broker import MarvinBroker
+from .bus import EventBus
 from .config import MarvinSettings
-from .consolidation import ConsolidationEngine
 from .embeddings import EmbeddingService
 from .git import GitManager
 from .index import MemoryIndex, chunk_markdown
@@ -29,10 +29,16 @@ from .models import (
     SemanticFact,
     SessionClosureResult,
     SessionContext,
+    SleepReport,
     SyncReport,
 )
 from .reranker import RerankerService
 from .vault import VaultStore, normalize_links, normalize_tags
+
+if TYPE_CHECKING:
+    # litellm's import is slow; ConsolidationEngine is only needed at runtime
+    # where an engine is actually constructed (the consolidation phases).
+    from .consolidation import ConsolidationEngine
 
 
 def _parse_decay_kinds(csv: str) -> frozenset[MemoryKind] | None:
@@ -62,13 +68,13 @@ class MarvinService:
     def __init__(
         self,
         settings: MarvinSettings,
-        broker: MarvinBroker | None = None,
+        bus: EventBus | None = None,
         git_manager: GitManager | None = None,
     ) -> None:
         self.settings = settings
         self.settings.ensure_directories()
         self.vault = VaultStore(self.settings.resolved_vault_path)
-        self.broker = broker
+        self.bus = bus
         self.git_manager = git_manager
         self.embedder = EmbeddingService(
             provider=self.settings.embedding_provider,
@@ -531,6 +537,80 @@ class MarvinService:
             existing_path=existing.path if existing else None,
         )
 
+    def _default_engine(self) -> ConsolidationEngine:
+        from .consolidation import ConsolidationEngine
+
+        return ConsolidationEngine(
+            model=self.settings.sleep_model, api_base=self.settings.sleep_api_base
+        )
+
+    def extract_note(self, note: NoteRecord) -> bool:
+        """Entity-extract and auto-link one note, marking it ``extracted``.
+
+        Returns True when the pass changed the note's body or links.
+        """
+        from .extraction import auto_link_markdown, extract_entities
+
+        entities = extract_entities(note.body)
+        new_body = auto_link_markdown(note.body, entities) if entities else note.body
+        changed = new_body != note.body
+        self.vault.write_note(
+            kind=note.metadata.kind,
+            title=note.metadata.title,
+            body=new_body,
+            tags=note.metadata.tags,
+            links=sorted(set(note.metadata.links) | set(entities)),
+            aliases=note.metadata.aliases,
+            source=note.metadata.source,
+            facts=note.metadata.facts,
+            existing_path=note.path,
+            extracted=True,
+        )
+        if changed and self.git_manager:
+            self.git_manager.commit(f"chore(graph): auto-linked entities in {note.metadata.title}")
+        return changed
+
+    def extract_pending(self) -> int:
+        """Run entity extraction over every note the pass has not yet seen.
+
+        The vault is the queue: notes without ``extracted: true`` are pending,
+        regardless of how or when they were written. Returns the number of
+        notes whose links changed; the index is re-synced afterwards so the
+        graph stream sees the new wikilinks.
+        """
+        pending = self.vault.unextracted_notes()
+        if not pending:
+            return 0
+        changed = sum(1 for note in pending if self.extract_note(note))
+        self.sync()
+        return changed
+
+    def sleep(
+        self,
+        *,
+        engine: ConsolidationEngine | None = None,
+        min_episodes: int = 3,
+        min_facts: int = 3,
+    ) -> SleepReport:
+        """One full sleep pass: entity extraction, then two-phase consolidation.
+
+        Extraction runs first because the wikilinks it injects drive the
+        entity-scoped grouping of phase 1. It is skipped (and reported as
+        such) when langextract is unavailable, so a missing ``consolidate``
+        extra cannot half-process the vault with regex-quality links before
+        the consolidation phases raise their own actionable error.
+        """
+        from .extraction import LANGEXTRACT_AVAILABLE
+
+        report = SleepReport()
+        if LANGEXTRACT_AVAILABLE:
+            report.notes_linked = self.extract_pending()
+        else:
+            report.extraction_skipped = True
+        report.facts = self.consolidate_semantic(engine=engine, min_episodes=min_episodes)
+        report.insights = self.consolidate_reflective(engine=engine, min_facts=min_facts)
+        return report
+
     def consolidate_semantic(
         self,
         *,
@@ -546,7 +626,7 @@ class MarvinService:
         and marks the consumed episodes consolidated. Episodes whose entities
         never cross the threshold stay unconsolidated and keep accumulating.
         """
-        engine = engine or ConsolidationEngine()
+        engine = engine or self._default_engine()
         by_entity: dict[str, list[NoteRecord]] = {}
         for episode in self.vault.unconsolidated_episodes():
             for entity in episode.metadata.links:
@@ -597,7 +677,7 @@ class MarvinService:
         reflections by title, and persists each insight as a reflective note
         linked back to the entities that sourced it (provenance).
         """
-        engine = engine or ConsolidationEngine()
+        engine = engine or self._default_engine()
         seen = {
             note.metadata.title.casefold() for note in self.vault.list_notes(MemoryKind.REFLECTIVE)
         }
@@ -798,19 +878,17 @@ class MarvinService:
             note, relative_path=relative_path, chunks=chunks, embeddings=embeddings
         )
 
-        # Git & NATS Hooks
+        # Git & event-bus hooks
         if self.git_manager:
             self.git_manager.commit(f"auto-save: {title}")
-        if self.broker:
+        if self.bus:
             import asyncio
 
             # Fire and forget publication
             try:
                 loop = asyncio.get_running_loop()
                 loop.create_task(
-                    self.broker.publish(
-                        "memory.created", {"path": relative_path, "kind": kind.value}
-                    )
+                    self.bus.publish("memory.created", {"path": relative_path, "kind": kind.value})
                 )
             except RuntimeError:
                 pass  # Not running in async context

@@ -2,16 +2,15 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import os
+import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
-from .broker import MarvinBroker
+from .bus import EventBus, InProcessBus, NatsBus
 from .config import MarvinSettings
-from .consolidation import ConsolidationEngine
 from .git import GitManager
 from .models import (
     ConsistencyReport,
@@ -23,6 +22,8 @@ from .models import (
     SyncReport,
 )
 from .service import MarvinService
+
+logger = logging.getLogger(__name__)
 
 
 def parse_kind(value: str | None) -> MemoryKind | None:
@@ -38,16 +39,38 @@ def parse_kind(value: str | None) -> MemoryKind | None:
 
 def create_app(settings: MarvinSettings) -> FastMCP:
     git_manager = GitManager(settings.resolved_vault_path)
-    broker = MarvinBroker(os.environ.get("NATS_URL", "nats://127.0.0.1:4222"))
-    service = MarvinService(settings, broker=broker, git_manager=git_manager)
+    bus: EventBus = NatsBus(settings.nats_url) if settings.bus == "nats" else InProcessBus()
+    service = MarvinService(settings, bus=bus, git_manager=git_manager)
+
+    async def in_process_sleep(payload: dict) -> None:
+        from .consolidation import ConsolidationEngine
+
+        engine = ConsolidationEngine(model=settings.sleep_model, api_base=settings.sleep_api_base)
+        try:
+            # Consolidation is blocking LLM I/O; keep the event loop free.
+            report = await asyncio.to_thread(service.sleep, engine=engine)
+            logger.info(
+                "Sleep pass done: %d notes linked, %d facts, %d insights.",
+                report.notes_linked,
+                len(report.facts),
+                len(report.insights),
+            )
+        except Exception:
+            logger.exception("In-process sleep pass failed")
 
     @asynccontextmanager
     async def lifespan(_: FastMCP):
+        await bus.connect()
+        if isinstance(bus, InProcessBus):
+            # Single-process default: the serve process runs the sleep pass
+            # itself when one is requested; no worker or broker involved.
+            await bus.subscribe("memory.sleep", in_process_sleep)
         service.sync()
         try:
             yield
         finally:
             service.close()
+            await bus.close()
 
     app = FastMCP(
         name="marvin",
@@ -265,10 +288,16 @@ def create_app(settings: MarvinSettings) -> FastMCP:
     def marvin_merge_worktree(branch_name: str) -> dict[str, str]:
         return git_manager.merge_worktree(branch_name)
 
-    @app.tool(description="Trigger background consolidation and graphing via the Brain Worker.")
+    @app.tool(
+        description=(
+            "Trigger a background sleep pass (entity extraction + two-phase"
+            " consolidation) — in-process by default, via the Brain Worker in"
+            " cluster mode."
+        )
+    )
     async def marvin_trigger_sleep() -> str:
-        await broker.publish("memory.sleep", {"trigger": "agent"})
-        return "Consolidation requested. The brain worker is now processing."
+        await bus.publish("memory.sleep", {"trigger": "agent"})
+        return "Sleep pass requested; it runs in the background."
 
     @app.tool(
         description=(
@@ -308,28 +337,30 @@ def create_app(settings: MarvinSettings) -> FastMCP:
 
     @app.tool(
         description=(
-            "Run the two-phase consolidation synchronously (episodic -> semantic"
-            " facts, then semantic -> reflective insights) without requiring the"
-            " background worker. Uses the local LLM unless a model is given."
+            "Run the full sleep pass synchronously (entity extraction, then"
+            " episodic -> semantic facts, then semantic -> reflective insights)"
+            " without requiring the background worker. Uses the configured"
+            " sleep model unless a model is given."
         )
     )
     def marvin_consolidate(
         model: str | None = None,
         api_base: str | None = None,
     ) -> dict[str, Any]:
-        engine_kwargs: dict[str, str] = {}
-        if model:
-            engine_kwargs["model"] = model
-        if api_base:
-            engine_kwargs["api_base"] = api_base
-        engine = ConsolidationEngine(**engine_kwargs)
-        facts = service.consolidate_semantic(engine=engine)
-        insights = service.consolidate_reflective(engine=engine)
+        from .consolidation import ConsolidationEngine
+
+        engine = ConsolidationEngine(
+            model=model or settings.sleep_model,
+            api_base=api_base or settings.sleep_api_base,
+        )
+        report = service.sleep(engine=engine)
         return {
-            "facts_extracted": len(facts),
-            "insights_created": len(insights),
-            "facts": [f.model_dump(mode="json") for f in facts],
-            "insights": [i.model_dump(mode="json") for i in insights],
+            "notes_linked": report.notes_linked,
+            "extraction_skipped": report.extraction_skipped,
+            "facts_extracted": len(report.facts),
+            "insights_created": len(report.insights),
+            "facts": [f.model_dump(mode="json") for f in report.facts],
+            "insights": [i.model_dump(mode="json") for i in report.insights],
         }
 
     @app.tool(

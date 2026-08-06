@@ -71,6 +71,10 @@ class NoteMetadata(BaseModel):
     # instead of re-extracting. Meaningless (and absent from frontmatter) for
     # the other kinds.
     consolidated: bool = False
+    # Notes are marked extracted once the entity-extraction / auto-linking pass
+    # has processed them, so the next sleep pass skips them (the vault itself is
+    # the work queue). Absent from frontmatter until true.
+    extracted: bool = False
     # K-line procedural templates carry adaptive utility metadata: how often the
     # template was selected (usage_count) and an effectiveness EMA in [0,1].
     # Persisted (and present in frontmatter) only once non-zero.
@@ -139,6 +143,15 @@ class MemoryWriteResult(BaseModel):
     path: str
     created: bool
     message: str
+
+
+class SleepReport(BaseModel):
+    """Outcome of one sleep pass: extraction + two-phase consolidation."""
+
+    notes_linked: int = 0
+    extraction_skipped: bool = False
+    facts: list[MemoryWriteResult] = Field(default_factory=list)
+    insights: list[MemoryWriteResult] = Field(default_factory=list)
 
 
 class SessionContext(BaseModel):
