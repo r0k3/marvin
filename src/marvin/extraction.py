@@ -3,16 +3,15 @@ from __future__ import annotations
 import logging
 import os
 import re
-
-try:
-    import langextract as lx
-    from langextract.core import data
-
-    LANGEXTRACT_AVAILABLE = True
-except ImportError:
-    LANGEXTRACT_AVAILABLE = False
+from importlib.util import find_spec
 
 logger = logging.getLogger(__name__)
+
+
+def langextract_available() -> bool:
+    """Cheap installed-check; the actual (slow) langextract import is deferred
+    to first use so the CLI never pays it on the read/write path."""
+    return find_spec("langextract") is not None
 
 
 def _fallback_extract(text: str) -> list[str]:
@@ -25,8 +24,11 @@ def extract_entities(text: str) -> list[str]:
     Uses Google's langextract to extract named entities (Organizations, Products, Concepts).
     It leverages the LLM configured in the environment to perform zero-shot extraction.
     """
-    if not LANGEXTRACT_AVAILABLE:
+    if not langextract_available():
         return _fallback_extract(text)
+
+    import langextract as lx
+    from langextract.core import data
 
     # We provide a few-shot example to teach the schema to langextract
     examples = [

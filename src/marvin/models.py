@@ -24,6 +24,18 @@ class MemoryKind(StrEnum):
         return self.value.capitalize()
 
 
+def parse_kind(value: str | None) -> MemoryKind | None:
+    """Lenient user-input parser: ``"episodes"`` → ``EPISODIC``, blank → None."""
+    if value is None:
+        return None
+    normalized = value.strip().lower()
+    if not normalized:
+        return None
+    if normalized.endswith("s"):
+        normalized = normalized[:-1]
+    return MemoryKind(normalized)
+
+
 class FactAspect(StrEnum):
     KNOWLEDGE = "knowledge"
     PREFERENCE = "preference"

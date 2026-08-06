@@ -185,14 +185,14 @@ class TestErrorsAndServe:
 
     def test_legacy_transport_invocation_forwards_to_server(self, vault, capsys, monkeypatch):
         called: dict[str, list[str]] = {}
-        monkeypatch.setattr(cli._server, "main", lambda argv: called.setdefault("argv", argv))
+        monkeypatch.setattr("marvin.server.main", lambda argv: called.setdefault("argv", argv))
         assert cli.main(["--vault-path", str(vault), "--transport", "stdio"]) == 0
         assert "--transport" in called["argv"]
         assert "deprecated" in capsys.readouterr().err
 
     def test_serve_subcommand_forwards_args(self, vault, monkeypatch):
         called: dict[str, list[str]] = {}
-        monkeypatch.setattr(cli._server, "main", lambda argv: called.setdefault("argv", argv))
+        monkeypatch.setattr("marvin.server.main", lambda argv: called.setdefault("argv", argv))
         assert cli.main(["serve", "--transport", "sse", "--port", "9000"]) == 0
         assert called["argv"] == ["--transport", "sse", "--port", "9000"]
 

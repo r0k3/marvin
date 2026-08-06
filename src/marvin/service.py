@@ -633,10 +633,10 @@ class MarvinService:
         extra cannot half-process the vault with regex-quality links before
         the consolidation phases raise their own actionable error.
         """
-        from .extraction import LANGEXTRACT_AVAILABLE
+        from .extraction import langextract_available
 
         report = SleepReport()
-        if LANGEXTRACT_AVAILABLE:
+        if langextract_available():
             report.notes_linked = self.extract_pending()
         else:
             report.extraction_skipped = True

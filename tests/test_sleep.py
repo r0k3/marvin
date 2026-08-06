@@ -72,7 +72,7 @@ def test_extract_pending_processes_each_note_once(tmp_path: Path, monkeypatch):
 
 
 def test_sleep_skips_extraction_without_langextract(tmp_path: Path, monkeypatch):
-    monkeypatch.setattr("marvin.extraction.LANGEXTRACT_AVAILABLE", False)
+    monkeypatch.setattr("marvin.extraction.langextract_available", lambda: False)
     service = _service(tmp_path)
     try:
         service.log_episode(title="A", summary="alpha")
@@ -87,7 +87,7 @@ def test_sleep_skips_extraction_without_langextract(tmp_path: Path, monkeypatch)
 
 def test_sleep_runs_extraction_then_consolidation(tmp_path: Path, monkeypatch):
     """Extraction's injected wikilinks must drive phase 1's entity grouping."""
-    monkeypatch.setattr("marvin.extraction.LANGEXTRACT_AVAILABLE", True)
+    monkeypatch.setattr("marvin.extraction.langextract_available", lambda: True)
     monkeypatch.setattr("marvin.extraction.extract_entities", lambda text: ["XR-9"])
 
     class Engine(NullEngine):

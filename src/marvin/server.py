@@ -14,27 +14,16 @@ from .config import MarvinSettings
 from .git import GitManager
 from .models import (
     ConsistencyReport,
-    MemoryKind,
     MemoryWriteResult,
     SearchHit,
     SessionClosureResult,
     SessionContext,
     SyncReport,
+    parse_kind,
 )
 from .service import MarvinService
 
 logger = logging.getLogger(__name__)
-
-
-def parse_kind(value: str | None) -> MemoryKind | None:
-    if value is None:
-        return None
-    normalized = value.strip().lower()
-    if not normalized:
-        return None
-    if normalized.endswith("s"):
-        normalized = normalized[:-1]
-    return MemoryKind(normalized)
 
 
 def create_app(settings: MarvinSettings) -> FastMCP:

@@ -30,10 +30,8 @@ import argparse
 import sys
 from pathlib import Path
 
-from . import server as _server
 from .config import MarvinSettings
-from .models import MemoryKind, NoteRecord, SearchHit
-from .server import parse_kind
+from .models import MemoryKind, NoteRecord, SearchHit, parse_kind
 from .service import MarvinService
 from .toon import encode_error, encode_help, encode_kv, encode_table
 
@@ -1154,18 +1152,24 @@ def main(argv: list[str] | None = None) -> int:
 
     # Pre-0.3 compatibility: `marvin --transport stdio ...` started the MCP
     # server. Detect the legacy flags-only invocation (no subcommand) and
-    # forward it so existing agent configurations keep working.
+    # forward it so existing agent configurations keep working. The server
+    # module (and the mcp stack under it) is imported only on these two
+    # dispatch paths — every other command, hooks especially, skips it.
     if argv and argv[0].startswith("--") and "--transport" in argv:
         print(
             "note: `marvin --transport ...` is deprecated; use `marvin serve --transport ...`",
             file=sys.stderr,
         )
+        from . import server as _server
+
         _server.main(argv)
         return 0
 
     # Dispatch `serve` before parsing so its flags reach the server parser
     # verbatim (argparse REMAINDER mishandles leading option tokens on 3.12).
     if argv and argv[0] == "serve":
+        from . import server as _server
+
         _server.main(argv[1:])
         return 0
 
