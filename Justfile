@@ -23,6 +23,10 @@ lint:
 fmt:
     uv run ruff format .
 
+# Regenerate CHANGELOG.md from conventional commits (pass the release tag).
+changelog tag:
+    uvx git-cliff --tag {{tag}} -o CHANGELOG.md
+
 # ---- demonstration ----
 
 # Midsummer Night's Dream demo: four-memory retrieval over a real vault.

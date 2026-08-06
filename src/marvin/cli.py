@@ -975,23 +975,59 @@ def cmd_skill_show(service: MarvinService | None, args: argparse.Namespace) -> i
     return 0
 
 
+# Skills-directory layout per host. Grok Build reads .claude/ locations
+# natively (verified compat behaviour), so it shares Claude Code's rows.
+# Codex CLI and OpenCode are AGENTS.md-based — use --target there.
+_SKILL_HOSTS = ("amp", "claude", "grok")
+
+
+def _skill_host_dirs(host: str) -> tuple[Path, Path]:
+    """(project dir, user dir) for a host; Path.home() resolved at call time."""
+    dot = ".agents" if host == "amp" else ".claude"
+    return Path(dot) / "skills", Path.home() / dot / "skills"
+
+
 def cmd_skill_install(service: MarvinService | None, args: argparse.Namespace) -> int:
     import shutil
 
     if args.target:
         base = Path(args.target).expanduser()
-    elif args.user:
-        base = Path.home() / ".claude" / "skills"
     else:
-        base = Path.cwd() / ".claude" / "skills"
+        project_dir, user_dir = _skill_host_dirs(args.host)
+        base = user_dir if args.user else Path.cwd() / project_dir
     dest = base / "marvin-memory"
     dest.parent.mkdir(parents=True, exist_ok=True)
     shutil.copytree(_packaged_skill_dir(), dest, dirs_exist_ok=True)
     _print(
-        encode_kv("installed", {"skill": "marvin-memory", "path": str(dest)}),
+        encode_kv("installed", {"skill": "marvin-memory", "host": args.host, "path": str(dest)}),
         encode_help(
             [
                 ("marvin skill show", "print the skill for pasting into other harnesses"),
+                ("marvin hooks install", "wire automatic recall on top of the skill"),
+            ]
+        ),
+    )
+    return 0
+
+
+def cmd_skill_export(service: MarvinService, args: argparse.Namespace) -> int:
+    from .export import build_skill_bundle, default_bundle_name
+
+    name = args.name or default_bundle_name(args.tag)
+    out_dir = Path(args.out).expanduser() if args.out else Path.cwd() / name
+    files = build_skill_bundle(service, name=name, tag=args.tag, max_chars=args.max_chars)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    for fname, content in files.items():
+        (out_dir / fname).write_text(content, encoding="utf-8")
+    rows = [{"file": fname, "chars": len(content)} for fname, content in sorted(files.items())]
+    _print(
+        encode_kv("exported", {"skill": name, "path": str(out_dir), "files": len(files)}),
+        encode_table("files", rows, ["file", "chars"]),
+        encode_help(
+            [
+                (f"cp -r {out_dir} ./.claude/skills/{name}", "use in Claude Code / Grok (project)"),
+                (f"cp -r {out_dir} ~/.agents/skills/{name}", "use in Amp (user)"),
+                ("marvin skill export --tag project/<owner>-<repo>", "narrow to one project"),
             ]
         ),
     )
@@ -1198,18 +1234,33 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--min-facts", type=int, default=3, dest="min_facts")
     p.set_defaults(func=cmd_consolidate)
 
-    sk = sub.add_parser("skill", help="The bundled agent skill: show / install")
+    sk = sub.add_parser("skill", help="The bundled agent skill: show / install / export")
     sk_sub = sk.add_subparsers(dest="skill_command", required=True)
     p = sk_sub.add_parser("show", help="Print SKILL.md (paste into any harness)")
     p.set_defaults(func=cmd_skill_show, needs_service=False)
-    p = sk_sub.add_parser("install", help="Copy the skill into a skills directory")
+    p = sk_sub.add_parser("install", help="Copy the skill into a host's skills directory")
+    p.add_argument(
+        "--host",
+        default="claude",
+        choices=_SKILL_HOSTS,
+        help="which host's skills layout to use (grok reads the claude paths)",
+    )
     p.add_argument(
         "--user",
         action="store_true",
-        help="install to ~/.claude/skills (default: ./.claude/skills)",
+        help="user-level skills directory instead of the project one",
     )
-    p.add_argument("--target", help="explicit skills directory")
+    p.add_argument("--target", help="explicit skills directory (overrides --host)")
     p.set_defaults(func=cmd_skill_install, needs_service=False)
+    p = sk_sub.add_parser(
+        "export",
+        help="Compile the vault into a portable skill bundle (zero-LLM snapshot)",
+    )
+    p.add_argument("--out", help="output directory (default: ./<name>/)")
+    p.add_argument("--tag", help="only include notes carrying this tag (e.g. project/x)")
+    p.add_argument("--name", help="skill name (default: derived from --tag or vault-memory)")
+    p.add_argument("--max-chars", type=int, default=8000, dest="max_chars")
+    p.set_defaults(func=cmd_skill_export)
 
     wt = sub.add_parser("worktree", help="Branch memory for risky work: start / merge")
     wt_sub = wt.add_subparsers(dest="worktree_command", required=True)

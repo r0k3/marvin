@@ -90,7 +90,8 @@ agent *when* to act on what the dashboard shows. For Claude Code:
 | `marvin consolidate [--model m] [--api-base u]` | Full sleep pass now, synchronously (entity extraction → episodic → semantic → reflective) |
 | `marvin worktree start <branch>` / `marvin worktree merge <branch>` | Branch memory for risky work |
 | `marvin skill show` | Print the bundled `marvin-memory` agent skill (paste into any harness) |
-| `marvin skill install [--user\|--target <dir>]` | Install the skill into a skills directory (default: `./.claude/skills`) |
+| `marvin skill install [--host claude\|grok\|amp] [--user\|--target <dir>]` | Install the skill into a host's skills directory (default: `./.claude/skills`) |
+| `marvin skill export [--tag t] [--out dir] [--max-chars n]` | Compile the vault into a portable skill bundle — zero-LLM snapshot: glossary / patterns / cheatsheet / history |
 | `marvin serve [--transport stdio\|sse\|http] [--host] [--port]` | Run the MCP server (everything after `serve` is forwarded) |
 
 Every subcommand answers `--help` concisely.

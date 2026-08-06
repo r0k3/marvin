@@ -1,0 +1,42 @@
+# git-cliff configuration: Conventional Commits -> Keep a Changelog.
+# Regenerate with `just changelog` (or: uvx git-cliff --tag vX.Y.Z -o CHANGELOG.md).
+
+[changelog]
+header = """
+# Changelog
+
+All notable changes to **marvin-memory** are documented here. The format is
+based on [Keep a Changelog](https://keepachangelog.com/), generated from
+[Conventional Commits](https://www.conventionalcommits.org/) via
+[git-cliff](https://git-cliff.org/).
+"""
+body = """
+{% if version %}
+## [{{ version | trim_start_matches(pat="v") }}] - {{ timestamp | date(format="%Y-%m-%d") }}
+{% else %}
+## [Unreleased]
+{% endif %}
+{% for group, commits in commits | group_by(attribute="group") %}
+### {{ group | striptags | trim | upper_first }}
+{% for commit in commits %}
+- {{ commit.message | split(pat="\n") | first | trim }}\
+{% endfor %}
+{% endfor %}
+"""
+trim = true
+
+[git]
+conventional_commits = true
+filter_unconventional = false
+commit_parsers = [
+  { message = "^feat", group = "<!-- 0 -->Added" },
+  { message = "^fix|^perf", group = "<!-- 1 -->Fixed" },
+  { message = "^feat.*!|^refactor.*!|BREAKING", group = "<!-- 2 -->Changed" },
+  { message = "^refactor", group = "<!-- 2 -->Changed" },
+  { message = "^docs", group = "<!-- 3 -->Documentation" },
+  { message = "^(chore|ci|test|build|style)", skip = true },
+  { message = ".*", group = "<!-- 4 -->Other" },
+]
+protect_breaking_commits = true
+tag_pattern = "v[0-9].*"
+sort_commits = "oldest"

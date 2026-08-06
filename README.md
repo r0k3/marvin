@@ -17,6 +17,92 @@ Named in homage to **Marvin Minsky** and his foundational book [*The Society of 
 
 ---
 
+## Quick Start
+
+### Lightweight (CLI + MCP over stdio)
+
+```bash
+uv tool install git+https://github.com/r0k3/marvin
+```
+
+You immediately have the AXI command line:
+
+```bash
+marvin remember "DB" --predicate storage --value "PostgreSQL with asyncpg"
+marvin search "postgres"                 # TOON output: hits[1]{title,kind,path}: ...
+marvin skill install                     # teach your agent when to use all this
+marvin hooks install --host claude       # auto-recall: memory injects itself (claude/codex/grok)
+marvin doctor                            # install-state checkup, with exact fix commands
+marvin skill export                      # compile the vault into a portable agent skill
+```
+
+Bare `marvin` is a live dashboard, not help text — token-efficient TOON your agent (or you) can read at a glance:
+
+```text
+$ marvin
+vault:
+  path: ~/.marvin_vault
+  notes: 42
+  episodic: 17
+  semantic: 18
+  procedural: 4
+  reflective: 3
+  unconsolidated_episodes: 5
+  indexed: 42
+recent[3]{title,kind,path}:
+  Fixed race in worker,episodic,Episodic/Fixed race in worker.md
+  ...
+help[4]:
+  marvin search <query>   # hybrid recall across all four memory types
+  marvin consolidate      # distill 5 unconsolidated episodes
+  ...
+```
+
+And the MCP server for your agent:
+
+```json
+{
+  "mcpServers": {
+    "marvin": {
+      "command": "marvin",
+      "args": ["serve", "--vault-path", "~/.marvin_vault", "--transport", "stdio"]
+    }
+  }
+}
+```
+
+This gives you the vault, hybrid retrieval, and all 20 tools. Add the sleep pass (entity extraction + two-phase consolidation with any litellm-supported model) with the `consolidate` extra:
+
+```bash
+uv tool install 'marvin-memory[consolidate] @ git+https://github.com/r0k3/marvin'
+marvin consolidate            # drain the queue whenever you like
+```
+
+### Full cluster (Docker, with the Brain Worker — optional)
+
+For always-on background processing instead of on-demand sleep.
+
+**Prerequisites:** [Docker](https://docs.docker.com/get-docker/) and Docker Compose.
+
+```bash
+git clone https://github.com/r0k3/marvin.git
+cd marvin
+
+# Start the Marvin cluster
+docker compose up -d
+
+# Pull the local consolidation model (one-time; any litellm-supported model works)
+docker exec -it marvin-ollama-1 ollama pull qwen3.6:35b-a3b-q4_K_M
+```
+
+The MCP Gateway is now listening on `http://localhost:8421/sse`.
+
+### GPU acceleration (optional)
+
+```bash
+uv pip install 'marvin-memory[gpu]'   # Linux + NVIDIA (CUDA 12.x): embeddings + fp16 reranker on GPU
+```
+
 ## Why Marvin?
 
 Most agentic "memory skills" dump chat logs into a hidden SQLite database or a black-box vector store. That works for casual chatbots, but breaks down in professional workflows. When you take your agent's memories seriously, you need **ergonomics, interpretability, and safety**.
@@ -28,7 +114,7 @@ Marvin writes every memory as a clean, human-readable **Markdown file with YAML 
 Agents hallucinate and explore dead ends. Because the vault is natively backed by **Git**, agents check out isolated worktree branches for risky tasks: merge on success, discard on failure. Every memory write is a commit — `git blame`, `git diff`, and `git revert` work on your agent's thoughts. A polluted memory is one revert away from clean, not a database surgery project.
 
 ### 3. Asynchronous Consolidation (Computational Sleep)
-Biological memory is *consolidated* during sleep. Marvin's background **Brain Worker** (driven by a **NATS** broker) extracts entities via [`langextract`](https://github.com/google/langextract), injects `[[Wikilinks]]`, and runs a two-phase consolidation with a local LLM: entity-scoped **semantic facts** are distilled from raw episodic logs, then cross-fact **reflective insights** are synthesized per aspect. Your agent's write path stays fast; the thinking happens offline.
+Biological memory is *consolidated* during sleep. Marvin's **sleep pass** extracts entities via [`langextract`](https://github.com/google/langextract), injects `[[Wikilinks]]`, and runs a two-phase consolidation with a local LLM: entity-scoped **semantic facts** are distilled from raw episodic logs, then cross-fact **reflective insights** are synthesized per aspect. Your agent's write path stays fast; the thinking happens offline — on demand (`marvin consolidate`), in the background of the serve process, or continuously via the optional NATS-brokered worker cluster.
 
 ## The four memories
 
@@ -112,90 +198,6 @@ For **always-on background processing**, the optional Docker Compose cluster (`M
 
 More detail in [ARCHITECTURE.md](ARCHITECTURE.md) and the [docs site](https://r0k3.github.io/marvin/architecture/).
 
-## Quick Start
-
-### Lightweight (CLI + MCP over stdio)
-
-```bash
-uv tool install git+https://github.com/r0k3/marvin
-```
-
-You immediately have the AXI command line:
-
-```bash
-marvin remember "DB" --predicate storage --value "PostgreSQL with asyncpg"
-marvin search "postgres"                 # TOON output: hits[1]{title,kind,path}: ...
-marvin skill install                     # teach your agent when to use all this
-marvin doctor                            # install-state checkup, with exact fix commands
-```
-
-Bare `marvin` is a live dashboard, not help text — token-efficient TOON your agent (or you) can read at a glance:
-
-```text
-$ marvin
-vault:
-  path: ~/.marvin_vault
-  notes: 42
-  episodic: 17
-  semantic: 18
-  procedural: 4
-  reflective: 3
-  unconsolidated_episodes: 5
-  indexed: 42
-recent[3]{title,kind,path}:
-  Fixed race in worker,episodic,Episodic/Fixed race in worker.md
-  ...
-help[4]:
-  marvin search <query>   # hybrid recall across all four memory types
-  marvin consolidate      # distill 5 unconsolidated episodes
-  ...
-```
-
-And the MCP server for your agent:
-
-```json
-{
-  "mcpServers": {
-    "marvin": {
-      "command": "marvin",
-      "args": ["serve", "--vault-path", "~/.marvin_vault", "--transport", "stdio"]
-    }
-  }
-}
-```
-
-This gives you the vault, hybrid retrieval, and all 20 tools. Add the sleep pass (entity extraction + two-phase consolidation with any litellm-supported model) with the `consolidate` extra:
-
-```bash
-uv tool install 'marvin-memory[consolidate] @ git+https://github.com/r0k3/marvin'
-marvin consolidate            # drain the queue whenever you like
-```
-
-### Full cluster (Docker, with the Brain Worker — optional)
-
-For always-on background processing instead of on-demand sleep.
-
-**Prerequisites:** [Docker](https://docs.docker.com/get-docker/) and Docker Compose.
-
-```bash
-git clone https://github.com/r0k3/marvin.git
-cd marvin
-
-# Start the Marvin cluster
-docker compose up -d
-
-# Pull the local consolidation model (one-time; any litellm-supported model works)
-docker exec -it marvin-ollama-1 ollama pull qwen3.6:35b-a3b-q4_K_M
-```
-
-The MCP Gateway is now listening on `http://localhost:8421/sse`.
-
-### GPU acceleration (optional)
-
-```bash
-uv pip install 'marvin-memory[gpu]'   # Linux + NVIDIA (CUDA 12.x): embeddings + fp16 reranker on GPU
-```
-
 ## Agent Configuration
 
 ### Goose
@@ -245,12 +247,15 @@ Add to your MCP config:
 Marvin ships with a first-class **agent skill** (`marvin-memory`) that teaches the agent *when* to use memory without being told: which signals to store (and as which memory type), recall-before-answering, closing the template feedback loop after "that worked", session lifecycle, and what never to store. It covers both surfaces — the `marvin_*` MCP tools and the CLI — and was pressure-tested against baseline agent behavior.
 
 ```bash
-marvin skill install          # → ./.claude/skills/marvin-memory (Claude Code, project)
+marvin skill install          # → ./.claude/skills/marvin-memory (Claude Code & Grok, project)
 marvin skill install --user   # → ~/.claude/skills/marvin-memory
+marvin skill install --host amp   # → ./.agents/skills/marvin-memory
 marvin skill show             # print SKILL.md to paste into any other harness
 ```
 
 Source: [`src/marvin/skill/SKILL.md`](src/marvin/skill/SKILL.md).
+
+And the reverse direction — **compile your memories into a skill**: `marvin skill export` deterministically distills the vault (zero LLM calls) into a portable Agent Skills bundle — facts → `glossary.md`, procedures and K-line templates → `patterns.md`, reflective insights → `cheatsheet.md`, episodes → `history.md`, all char-budgeted under a `SKILL.md` index. Drop it into any host's skills directory and your agent carries the knowledge even where no Marvin server runs (`--tag project/<owner>-<repo>` narrows it to one project).
 
 ## Try the demo
 
