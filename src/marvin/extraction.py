@@ -14,6 +14,25 @@ def langextract_available() -> bool:
     return find_spec("langextract") is not None
 
 
+def _resolve_extract_model() -> str:
+    """Model id for langextract's zero-shot extraction.
+
+    Local Ollama is the default unless an external API key is present.
+    Override via MARVIN_EXTRACT_MODEL (e.g. 'gpt-5.4' or a local model).
+    langextract's provider registry matches bare model names (^qwen,
+    ^llama, ...), so a litellm-style 'ollama/' prefix breaks resolution —
+    found on the first real sleep pass — and is stripped here to keep both
+    config styles working.
+    """
+    model_id = os.environ.get("MARVIN_EXTRACT_MODEL")
+    if not model_id:
+        has_api_key = any(
+            k in os.environ for k in ("LANGEXTRACT_API_KEY", "GEMINI_API_KEY", "OPENAI_API_KEY")
+        )
+        model_id = "gpt-5.4" if has_api_key else "qwen3.6:35b-a3b-q4_K_M"
+    return model_id.removeprefix("ollama/")
+
+
 def _fallback_extract(text: str) -> list[str]:
     """Fallback regex for capitalized multi-word concepts if langextract fails or is unavailable."""
     return list(set(re.findall(r"\b[A-Z][a-zA-Z]*(?: [A-Z][a-zA-Z]*)*\b", text)))
@@ -42,15 +61,7 @@ def extract_entities(text: str) -> list[str]:
         )
     ]
 
-    # Use OLLAMA as default if no external API key is provided, matching our V2 Docker setup.
-    # User can override via standard LANGEXTRACT_API_KEY / GEMINI_API_KEY environment variables
-    # or by setting MARVIN_EXTRACT_MODEL (e.g. 'gpt-5.4' or 'ollama/qwen3.6:35b-a3b-q4_K_M')
-    model_id = os.environ.get("MARVIN_EXTRACT_MODEL")
-    if not model_id:
-        has_api_key = any(
-            k in os.environ for k in ("LANGEXTRACT_API_KEY", "GEMINI_API_KEY", "OPENAI_API_KEY")
-        )
-        model_id = "gpt-5.4" if has_api_key else "ollama/qwen3.6:35b-a3b-q4_K_M"
+    model_id = _resolve_extract_model()
 
     try:
         doc = lx.extract(
