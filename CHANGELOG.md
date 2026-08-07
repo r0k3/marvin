@@ -5,7 +5,7 @@ based on [Keep a Changelog](https://keepachangelog.com/), generated from
 [Conventional Commits](https://www.conventionalcommits.org/) via
 [git-cliff](https://git-cliff.org/).
 
-## [0.4.0] - 2026-08-06
+## [0.4.0] - 2026-08-07
 
 
 ### Added
@@ -16,15 +16,20 @@ based on [Keep a Changelog](https://keepachangelog.com/), generated from
 - auto-recall hooks, correction detection, project auto-tagging
 - codex + grok installers, plugin templates for opencode/amp
 - invisible-Unicode stripping on every write, injection scan on sleep output
+- marvin skill export — compile the vault into a portable skill; multi-host install; changelog automation
+- marvin-memory Claude Code plugin — hooks + MCP + skill + commands + curator, repo as marketplace
 
 ### Fixed
 
 - 0.4s hooks — lazy langextract and mcp-server imports
+- grok needs the hookSpecificOutput envelope — and doesn't consume it yet
+- strip litellm-style ollama/ prefix for langextract
 
 ### Documentation
 
 - single-process default story — profiles, extras, doctor, cluster as opt-in
 - auto-recall guide, correction flow in the skill, reference rows
+- rewrite README as the practical front page; add CLAUDE.md; consolidate architecture
 
 ## [0.3.0] - 2026-07-04
 
