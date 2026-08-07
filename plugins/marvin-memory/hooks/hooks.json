@@ -1,0 +1,27 @@
+{
+  "description": "Marvin auto-recall: budgeted session-start memory context and per-prompt lexical recall via the marvin CLI. Guarded so a missing marvin binary (or broken vault) never breaks a session — the hook silently no-ops.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh -c 'command -v marvin >/dev/null 2>&1 && marvin hook session-start || true'",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh -c 'command -v marvin >/dev/null 2>&1 && marvin hook user-prompt || true'",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -227,7 +227,18 @@ Add to `.cursor/mcp.json`:
 }
 ```
 
-### Claude Code / Copilot CLI
+### Claude Code — the plugin (recommended)
+
+One install delivers everything: auto-recall hooks, the 20-tool MCP server, the memory skill, `/marvin-memory:*` slash commands, and a curator agent:
+
+```
+/plugin marketplace add r0k3/marvin
+/plugin install marvin-memory@marvin
+```
+
+Prerequisite: the `marvin` CLI on PATH (`uv tool install` above). Recommended: pin a global vault in `~/.claude/settings.json` — `{"env": {"MARVIN_VAULT_PATH": "~/.marvin_vault"}}`. Details: [`plugins/marvin-memory/`](plugins/marvin-memory/).
+
+### Claude Code (manual MCP) / Copilot CLI
 
 Add to your MCP config:
 

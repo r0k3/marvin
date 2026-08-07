@@ -25,6 +25,24 @@ At any point, `marvin doctor` reports the install state of every component
 (embedder, GPU, extras, sleep endpoint, skill) with the exact command that
 fixes anything missing.
 
+### Claude Code plugin (everything in one install)
+
+For Claude Code, the plugin bundles the whole integration — auto-recall
+hooks, the 20-tool MCP server (stdio), the `marvin-memory` skill,
+`/marvin-memory:remember|recall|sleep|status|export` slash commands, and
+a `memory-curator` agent:
+
+```
+/plugin marketplace add r0k3/marvin
+/plugin install marvin-memory@marvin
+```
+
+The plugin's hooks replace `marvin hooks install --host claude` — use
+one or the other, not both. Pin a global vault so every project shares
+memory: `{"env": {"MARVIN_VAULT_PATH": "~/.marvin_vault"}}` in
+`~/.claude/settings.json`. The sections below cover the same pieces
+individually for non-plugin setups.
+
 ### Auto-recall hooks (memory without asking)
 
 By default, memory only works when the agent chooses to call a tool. The

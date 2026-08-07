@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "marvin": {
+      "command": "marvin",
+      "args": ["serve", "--transport", "stdio"]
+    }
+  }
+}

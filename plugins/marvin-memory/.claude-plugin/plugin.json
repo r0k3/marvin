@@ -1,0 +1,13 @@
+{
+  "name": "marvin-memory",
+  "version": "0.4.0",
+  "description": "Obsidian-native, Git-backed memory: auto-recall hooks, 20 MCP tools, a memory skill, slash commands, and a curator agent — powered by the marvin CLI.",
+  "author": {
+    "name": "r0k3",
+    "email": "robert.kende@gmail.com"
+  },
+  "homepage": "https://r0k3.github.io/marvin",
+  "repository": "https://github.com/r0k3/marvin",
+  "license": "MIT",
+  "keywords": ["memory", "mcp", "obsidian", "knowledge-base", "agent-memory"]
+}

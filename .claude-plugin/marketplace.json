@@ -1,0 +1,18 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "marvin",
+  "description": "Marvin — Obsidian-native, Git-backed memory for AI agents.",
+  "owner": {
+    "name": "r0k3",
+    "email": "robert.kende@gmail.com"
+  },
+  "plugins": [
+    {
+      "name": "marvin-memory",
+      "source": "./plugins/marvin-memory",
+      "description": "Durable four-type memory for Claude Code: auto-recall hooks, the full 20-tool MCP server, a battle-tested memory skill, slash commands, and a curator agent — all powered by the local marvin CLI (zero LLM calls on write and recall).",
+      "category": "productivity",
+      "keywords": ["memory", "knowledge-base", "mcp", "obsidian", "agent-memory"]
+    }
+  ]
+}

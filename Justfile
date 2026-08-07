@@ -27,6 +27,10 @@ fmt:
 changelog tag:
     uvx git-cliff --tag {{tag}} -o CHANGELOG.md
 
+# Sync the canonical skill into the Claude Code plugin (test-enforced).
+sync-plugin:
+    cp src/marvin/skill/SKILL.md plugins/marvin-memory/skills/marvin-memory/SKILL.md
+
 # ---- demonstration ----
 
 # Midsummer Night's Dream demo: four-memory retrieval over a real vault.
