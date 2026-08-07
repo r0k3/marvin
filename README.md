@@ -1,300 +1,115 @@
 # Marvin
 
-<p align="center">
-  <img src="docs/assets/logo.svg" width="180" alt="Marvin">
-</p>
+<img src="docs/assets/logo.svg" width="140" alt="Marvin logo" align="right">
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue.svg)](https://www.python.org/downloads/)
-[![MCP](https://img.shields.io/badge/MCP-compatible-green.svg)](https://modelcontextprotocol.io)
-[![Docs](https://img.shields.io/badge/docs-r0k3.github.io%2Fmarvin-blueviolet)](https://r0k3.github.io/marvin/)
+[![Docs](https://img.shields.io/badge/docs-r0k3.github.io%2Fmarvin-blue)](https://r0k3.github.io/marvin/)
 
-**An active, Obsidian-native, Git-backed memory system for AI agents.**
+Long-term memory for AI agents, kept in plain Markdown.
 
-Named in homage to **Marvin Minsky** and his foundational book [*The Society of Mind*](https://amzn.to/3PuFQ3K), Marvin turns ephemeral LLM context windows into a durable, topologically connected knowledge base. It is the reference implementation of the research paper [*K-Lines: A Cognitively-Grounded Four-Memory Architecture for Persistent Conversational AI*](https://ssrn.com/abstract=6234218) (and its [companion repository](https://github.com/r0k3/k-lines)).
+Marvin stores what your agent learns as Markdown files with YAML frontmatter, in a vault you can open in Obsidian, grep, diff, and keep under Git. Recall runs on a local hybrid index: SQLite full-text search, vector similarity, and a wikilink entity graph, fused and optionally reranked. Storing a memory never calls an LLM, and neither does recalling one. Both work offline and cost nothing per call.
 
-**Headline results on [LongMemEval-S](https://arxiv.org/abs/2410.10813)** (500 questions, ~115k-token haystacks): **99.6% `recall_any@5`** retrieval, and **82.8% end-to-end QA accuracy with a fully local, quantized reader** — within ~10 points of frontier-cloud-reader systems, with zero LLM calls on the write or query path and no cloud dependency. [Full numbers →](https://r0k3.github.io/marvin/guide/evaluation/)
+The name honors Marvin Minsky. The design follows the paper [K-Lines: A Cognitively-Grounded Four-Memory Architecture for Persistent Conversational AI](https://ssrn.com/abstract=6234218), and this repository is its reference implementation.
 
----
-
-## Quick Start
-
-### Lightweight (CLI + MCP over stdio)
+## Install
 
 ```bash
 uv tool install git+https://github.com/r0k3/marvin
 ```
 
-You immediately have the AXI command line:
+Try it:
 
 ```bash
 marvin remember "DB" --predicate storage --value "PostgreSQL with asyncpg"
-marvin search "postgres"                 # TOON output: hits[1]{title,kind,path}: ...
-marvin skill install                     # teach your agent when to use all this
-marvin hooks install --host claude       # auto-recall: memory injects itself (claude/codex/grok)
-marvin doctor                            # install-state checkup, with exact fix commands
-marvin skill export                      # compile the vault into a portable agent skill
+marvin search "postgres"
+marvin            # dashboard: counts per memory type, recent notes, suggested next steps
+marvin doctor     # what's installed, what's missing, and the command that fixes it
 ```
 
-Bare `marvin` is a live dashboard, not help text — token-efficient TOON your agent (or you) can read at a glance:
+`marvin --help` lists every command. Output is TOON, a compact tabular format that agents parse cheaply and humans read fine.
 
-```text
-$ marvin
-vault:
-  path: ~/.marvin_vault
-  notes: 42
-  episodic: 17
-  semantic: 18
-  procedural: 4
-  reflective: 3
-  unconsolidated_episodes: 5
-  indexed: 42
-recent[3]{title,kind,path}:
-  Fixed race in worker,episodic,Episodic/Fixed race in worker.md
-  ...
-help[4]:
-  marvin search <query>   # hybrid recall across all four memory types
-  marvin consolidate      # distill 5 unconsolidated episodes
-  ...
-```
+## Using it from an agent
 
-And the MCP server for your agent:
-
-```json
-{
-  "mcpServers": {
-    "marvin": {
-      "command": "marvin",
-      "args": ["serve", "--vault-path", "~/.marvin_vault", "--transport", "stdio"]
-    }
-  }
-}
-```
-
-This gives you the vault, hybrid retrieval, and all 20 tools. Add the sleep pass (entity extraction + two-phase consolidation with any litellm-supported model) with the `consolidate` extra:
-
-```bash
-uv tool install 'marvin-memory[consolidate] @ git+https://github.com/r0k3/marvin'
-marvin consolidate            # drain the queue whenever you like
-```
-
-### Full cluster (Docker, with the Brain Worker — optional)
-
-For always-on background processing instead of on-demand sleep.
-
-**Prerequisites:** [Docker](https://docs.docker.com/get-docker/) and Docker Compose.
-
-```bash
-git clone https://github.com/r0k3/marvin.git
-cd marvin
-
-# Start the Marvin cluster
-docker compose up -d
-
-# Pull the local consolidation model (one-time; any litellm-supported model works)
-docker exec -it marvin-ollama-1 ollama pull qwen3.6:35b-a3b-q4_K_M
-```
-
-The MCP Gateway is now listening on `http://localhost:8421/sse`.
-
-### GPU acceleration (optional)
-
-```bash
-uv pip install 'marvin-memory[gpu]'   # Linux + NVIDIA (CUDA 12.x): embeddings + fp16 reranker on GPU
-```
-
-## Why Marvin?
-
-Most agentic "memory skills" dump chat logs into a hidden SQLite database or a black-box vector store. That works for casual chatbots, but breaks down in professional workflows. When you take your agent's memories seriously, you need **ergonomics, interpretability, and safety**.
-
-### 1. The Ergonomics of Obsidian (Markdown)
-Marvin writes every memory as a clean, human-readable **Markdown file with YAML frontmatter**, organized into `Episodic/`, `Semantic/`, `Procedural/`, and `Reflective/` folders. Point [Obsidian](https://obsidian.md/) at the vault and you get a visual graph of everything your agent has learned. You can edit, co-author, and browse the knowledge base alongside your AI.
-
-### 2. Safety through Git (Agentic Worktrees)
-Agents hallucinate and explore dead ends. Because the vault is natively backed by **Git**, agents check out isolated worktree branches for risky tasks: merge on success, discard on failure. Every memory write is a commit — `git blame`, `git diff`, and `git revert` work on your agent's thoughts. A polluted memory is one revert away from clean, not a database surgery project.
-
-### 3. Asynchronous Consolidation (Computational Sleep)
-Biological memory is *consolidated* during sleep. Marvin's **sleep pass** extracts entities via [`langextract`](https://github.com/google/langextract), injects `[[Wikilinks]]`, and runs a two-phase consolidation with a local LLM: entity-scoped **semantic facts** are distilled from raw episodic logs, then cross-fact **reflective insights** are synthesized per aspect. Your agent's write path stays fast; the thinking happens offline — on demand (`marvin consolidate`), in the background of the serve process, or continuously via the optional NATS-brokered worker cluster.
-
-## The four memories
-
-| Kind | Holds | Mechanism |
-|---|---|---|
-| **Episodic** | Raw events: tasks, bugs, sessions | Logged fast, marked `consolidated` once distilled |
-| **Semantic** | Durable facts | Structured facts (predicate / value / aspect / confidence); a new value for the same predicate **soft-deprecates** the old one — auditable, never silently overwritten, excluded from retrieval |
-| **Procedural** | Playbooks and rules | Plain procedures, plus **K-line templates**: response strategies with trigger conditions (intents / styles / entity types / keywords), selected by weighted partial-match scoring and ranked by adaptive effectiveness |
-| **Reflective** | Cross-cutting insights | Synthesized from accumulated facts during sleep, with provenance links |
-
-## Features
-
-- **Obsidian-Native Vault** — clean Markdown + YAML frontmatter; full graph visualization in Obsidian.
-- **Git-Backed Worktrees** — branch memory for risky tasks; merge on success, discard on failure.
-- **Structured Semantic Facts** — stable fact IDs, predicates, aspects, confidence, and soft deprecation with `replaced_by` linking.
-- **K-Line Procedural Templates** — Minsky-style partial reactivation: weighted trigger scoring plus an ACT-R-style utility (usage count + effectiveness EMA), surfaced automatically by `marvin_prepare_session`.
-- **Deep Semantic Graphing** — zero-shot entity extraction with automatic `[[Wikilink]]` injection; the wikilink graph feeds retrieval.
-- **Computational Sleep** — two-phase consolidation using local open-weight models (default `qwen3.6:35b-a3b-q4_K_M` via Ollama); runs on demand, in the background of the serve process, or via the optional worker cluster. The vault's `extracted`/`consolidated` flags are the durable work queue.
-- **Hybrid Retrieval** — three-stream Reciprocal Rank Fusion (SQLite FTS5 + `sqlite-vec` dense vectors + IDF-weighted entity graph), optional `bge-reranker-v2-m3` cross-encoder (int8 on CPU, fp16 on GPU), and opt-in time-aware freshness decay.
-- **MCP Gateway** — 20 tools (the full service surface) over SSE (port 8421) or stdio; plugs into any MCP-compatible agent.
-- **Auto-Recall Hooks** — `marvin hooks install` wires session-start and per-prompt memory injection into the host agent (~0.4 s, char-budgeted, lexical-only on the prompt path); a deterministic **correction detector** nudges the agent to persist user corrections with an audited `--reason` deprecation trail.
-- **AXI CLI** — the same functionality as an [axi.md](https://axi.md/)-style command line: token-efficient TOON output, a live dashboard on bare `marvin`, `help[]` next-step hints, structured errors. Built for agents driving a shell, pleasant for humans.
-- **Reproducible Benchmark** — built-in LongMemEval-S harness for retrieval *and* end-to-end QA, so memory changes are measured, not vibed.
-
-## Benchmarks
-
-LongMemEval-S, cleaned release, all 500 questions. Retrieval: hybrid three-stream RRF + cross-encoder rerank. QA: top-10 retrieved sessions read by a **local** `qwen3.6:35b-a3b` (q4_K_M) with JSON + Chain-of-Note, graded under the official per-question-type judge protocol.
-
-| Metric | Score |
-|---|---|
-| `recall_any@5` | **99.6%** |
-| NDCG@10 | 95.3% |
-| MRR | 95.5% |
-| **End-to-end QA accuracy (local reader)** | **82.8%** |
-
-Two facts worth knowing: the published SOTA cluster (90–93%) is driven by frontier **cloud** readers, and in our controlled ablation the same local reader scores **45.8%** when handed the full ~126k-token history versus **81.2%** with Marvin's retrieved top-10 (~16k tokens) — the memory layer is what makes a local model accurate at all. Reproduction commands, per-type breakdowns, and the judge protocol are in the [evaluation guide](https://r0k3.github.io/marvin/guide/evaluation/).
-
-## Architecture
-
-**By default, Marvin is one process.** `marvin serve` bundles the vault, the hybrid index, the MCP server, and the sleep pass; the base install is retrieval-only (zero LLM dependencies), and two extras unlock more:
-
-| Extra | Adds | Needed for |
-|---|---|---|
-| `marvin-memory[consolidate]` | litellm + langextract | The sleep pass: entity extraction and two-phase consolidation |
-| `marvin-memory[cluster]` | nats-py | The multi-process cluster profile below |
-| `marvin-memory[gpu]` | CUDA onnxruntime | GPU embeddings + fp16 reranker |
-
-There is no broker in the default profile because **the vault itself is the work queue**: `extracted`/`consolidated` frontmatter flags mark pending work durably, so sleep passes resume exactly where the vault says — after crashes, restarts, or weeks of not running. And scaling follows Git, not a message bus: replicate the vault via a Git remote; every node rebuilds its index locally.
-
-For **always-on background processing**, the optional Docker Compose cluster (`MARVIN_BUS=nats`) splits the same code into four services:
-
-| Service | Role |
-|---|---|
-| **MCP Gateway** | FastMCP server exposing 20 tools via SSE on port `8421`. The low-latency edge your agent talks to. |
-| **NATS** | High-performance message broker with JetStream. Streams `memory.created` and `memory.sleep` events. |
-| **Brain Worker** | Background daemon subscribing to NATS. Runs entity extraction (langextract) and two-phase sleep consolidation. |
-| **Ollama** | Bundled local LLM container. Cost-free inference for the Brain Worker's consolidation phases. |
-
-```text
-+-----------+        MCP (SSE / stdio)         +--------------------+
-|           | -------------------------------->|                    |
-|   Agent   |                                  |   MCP Gateway      | ---> (Writes) ---> [ Git-Backed Vault ]
-|           | <------------------------------- |   (FastMCP API)    | <--- (Reads)  <--- [ SQLite-Vec Index ]
-|           |        (Search / Tools)          +--------------------+
-+-----------+                                           |
-                                              [ Publish 'memory.created' ]
-                                              [ Publish 'memory.sleep'   ]
-                                                        v
-                                              +--------------------+
-                                              |    NATS Broker     |
-                                              +--------------------+
-                                                        |
-                                              [ Consume Events ]
-                                                        v
-                                              +--------------------+
-                                              |                    | ---> (Extract Entities) -> [ LangExtract ]
-[ Local Ollama ] <--- (Consolidate 2-phase) --|    Brain Worker    |
-                                              |                    | ---> (Update Links & Commit to Vault)
-                                              +--------------------+
-```
-
-More detail in [ARCHITECTURE.md](ARCHITECTURE.md) and the [docs site](https://r0k3.github.io/marvin/architecture/).
-
-## Agent Configuration
-
-### Goose
-
-Add to `~/.config/goose/config.yaml`:
-
-```yaml
-extensions:
-  marvin:
-    enabled: true
-    type: sse
-    name: marvin
-    uri: http://localhost:8421/sse
-```
-
-### Cursor
-
-Add to `.cursor/mcp.json`:
-
-```json
-{
-  "mcpServers": {
-    "marvin": {
-      "url": "http://localhost:8421/sse"
-    }
-  }
-}
-```
-
-### Claude Code — the plugin (recommended)
-
-One install delivers everything: auto-recall hooks, the 20-tool MCP server, the memory skill, `/marvin-memory:*` slash commands, and a curator agent:
+**Claude Code.** Install the plugin. It brings the MCP server (20 tools), hooks that inject relevant memories at session start and on each prompt, a skill that teaches the agent when to store and recall, and `/marvin-memory:*` commands:
 
 ```
 /plugin marketplace add r0k3/marvin
 /plugin install marvin-memory@marvin
 ```
 
-Prerequisite: the `marvin` CLI on PATH (`uv tool install` above). Recommended: pin a global vault in `~/.claude/settings.json` — `{"env": {"MARVIN_VAULT_PATH": "~/.marvin_vault"}}`. Details: [`plugins/marvin-memory/`](plugins/marvin-memory/).
+Set one global vault so all projects share memory: add `"env": {"MARVIN_VAULT_PATH": "~/.marvin_vault"}` to `~/.claude/settings.json`. See [plugins/marvin-memory](plugins/marvin-memory/) for details.
 
-### Claude Code (manual MCP) / Copilot CLI
-
-Add to your MCP config:
+**Any MCP client.** Run the server over stdio:
 
 ```json
 {
   "mcpServers": {
     "marvin": {
-      "type": "sse",
-      "url": "http://localhost:8421/sse"
+      "command": "marvin",
+      "args": ["serve", "--transport", "stdio"]
     }
   }
 }
 ```
 
-## The Agent Skill
+`marvin serve --transport sse` serves HTTP on port 8421 instead, for clients like Goose and Cursor that connect by URL.
 
-Marvin ships with a first-class **agent skill** (`marvin-memory`) that teaches the agent *when* to use memory without being told: which signals to store (and as which memory type), recall-before-answering, closing the template feedback loop after "that worked", session lifecycle, and what never to store. It covers both surfaces — the `marvin_*` MCP tools and the CLI — and was pressure-tested against baseline agent behavior.
+**Codex CLI and Grok Build.** `marvin hooks install --host codex` (or `grok`) wires the same auto-recall hooks into those tools. One caveat we found in testing: Grok up to 0.2.118 runs the hooks but ignores their output, so use the skill there instead (`marvin skill install --host grok`).
+
+**Anything else.** `marvin skill show` prints the skill for pasting into other harnesses, and `marvin skill export` compiles your vault into a self-contained skill bundle that needs no server at all.
+
+## How memory is organized
+
+| Kind | Holds | Example |
+|---|---|---|
+| Episodic | events and completed work | "Fixed the double-ack race in the worker" |
+| Semantic | durable facts | DB storage: PostgreSQL with asyncpg |
+| Procedural | playbooks and response strategies | a release checklist; a debugging template |
+| Reflective | lessons that cut across facts | "test host contracts against the binary, not the docs" |
+
+Facts are structured: predicate, value, aspect, confidence. Storing a new value for the same predicate deprecates the old one instead of overwriting it, so corrections keep an audit trail (`--reason "user correction: ..."` records why). Writes made inside a git repository are tagged with the project automatically. The vault stays global on purpose, so what the agent learns in one project is available in the next.
+
+## The sleep pass
+
+Raw episodes accumulate fast and noisy. The sleep pass distills them offline: a local LLM extracts entities and links them as `[[wikilinks]]`, pulls stable facts out of recurring episodes, and synthesizes higher-level insights from accumulated facts. Your agent's write path never waits for any of this.
 
 ```bash
-marvin skill install          # → ./.claude/skills/marvin-memory (Claude Code & Grok, project)
-marvin skill install --user   # → ~/.claude/skills/marvin-memory
-marvin skill install --host amp   # → ./.agents/skills/marvin-memory
-marvin skill show             # print SKILL.md to paste into any other harness
+uv tool install 'marvin-memory[consolidate] @ git+https://github.com/r0k3/marvin'
+marvin consolidate
 ```
 
-Source: [`src/marvin/skill/SKILL.md`](src/marvin/skill/SKILL.md).
+The default model is a local one via Ollama (`qwen3.6:35b-a3b-q4_K_M`); any litellm-compatible endpoint works (`MARVIN_SLEEP_MODEL`, `MARVIN_SLEEP_API_BASE`). Progress lives in the vault itself as frontmatter flags, so the pass picks up where it left off no matter where it runs: on demand, inside the serve process, or in the optional NATS worker cluster (`docker compose up -d`) for always-on setups.
 
-And the reverse direction — **compile your memories into a skill**: `marvin skill export` deterministically distills the vault (zero LLM calls) into a portable Agent Skills bundle — facts → `glossary.md`, procedures and K-line templates → `patterns.md`, reflective insights → `cheatsheet.md`, episodes → `history.md`, all char-budgeted under a `SKILL.md` index. Drop it into any host's skills directory and your agent carries the knowledge even where no Marvin server runs (`--tag project/<owner>-<repo>` narrows it to one project).
+## Recall quality
 
-## Try the demo
+LongMemEval-S, all 500 questions, ~115k-token haystacks:
 
-```bash
-uv run python -m marvin.eval.demo
-```
+| Metric | Score |
+|---|---|
+| recall_any@5 | 99.6% |
+| NDCG@10 | 95.3% |
+| End-to-end QA, fully local reader | 82.8% |
 
-Runs annotated four-memory retrieval over the bundled *A Midsummer Night's Dream* vault ([`examples/demo_vault`](examples/demo_vault)) — episodic scenes, semantic facts, a procedural analysis strategy, and a reflective insight, each answering the query type it should.
+The retrieval layer is what makes a local model viable here: handed the full history instead, the same reader scores 45.8%. Reproduction commands and the judge protocol are in the [evaluation guide](https://r0k3.github.io/marvin/guide/evaluation/).
+
+## Safety
+
+Risky work can branch its memory: `marvin worktree start <name>` gives the agent an isolated Git branch of the vault, merged on success or discarded on failure. Every write is stripped of invisible Unicode (the bidi-control smuggling class of tricks), and text produced by the sleep-pass LLM is scanned for prompt-injection patterns before it may enter the vault. Notes you or your agent write directly are never content-filtered.
 
 ## Documentation
 
-Full documentation is at **[r0k3.github.io/marvin](https://r0k3.github.io/marvin/)**:
+The full docs are at [r0k3.github.io/marvin](https://r0k3.github.io/marvin/): [getting started](https://r0k3.github.io/marvin/guide/getting-started/), [CLI reference](https://r0k3.github.io/marvin/reference/cli/), [MCP tools](https://r0k3.github.io/marvin/reference/mcp-tools/), [the agent skill](https://r0k3.github.io/marvin/guide/skills/), and [evaluation](https://r0k3.github.io/marvin/guide/evaluation/). How it works inside is in [ARCHITECTURE.md](ARCHITECTURE.md).
 
-- [Getting started](https://r0k3.github.io/marvin/guide/getting-started/) — install, Docker cluster, agent configs
-- [MCP tools reference](https://r0k3.github.io/marvin/reference/mcp-tools/) — all 20 tools
-- [CLI reference (AXI)](https://r0k3.github.io/marvin/reference/cli/) — every command, TOON format, exit codes, session-hook pattern
-- [The agent skill](https://r0k3.github.io/marvin/guide/skills/) — what `marvin-memory` teaches and the test-first evidence behind it
-- [Architecture](https://r0k3.github.io/marvin/architecture/) and [evaluation methodology](https://r0k3.github.io/marvin/guide/evaluation/)
-
-## Contributing
-
-Contributions are welcome! Please open an issue or submit a pull request on [GitHub](https://github.com/r0k3/marvin).
+There is a small demo: `uv run python -m marvin.eval.demo` runs four-memory retrieval over a bundled *A Midsummer Night's Dream* vault.
 
 ## Citation
 
-If you use Marvin in your research, please cite the paper:
+If you use Marvin in research, please cite:
 
-> Kende, Robert, *K-Lines: A Cognitively-Grounded Four-Memory Architecture for Persistent Conversational AI* (February 06, 2026). Available at SSRN: <https://ssrn.com/abstract=6234218> or <http://dx.doi.org/10.2139/ssrn.6234218>
+> Kende, Robert. *K-Lines: A Cognitively-Grounded Four-Memory Architecture for Persistent Conversational AI.* SSRN, February 2026. <https://ssrn.com/abstract=6234218>
+
+<details>
+<summary>BibTeX</summary>
 
 ```bibtex
 @misc{kende2026klines,
@@ -308,6 +123,8 @@ If you use Marvin in your research, please cite the paper:
 }
 ```
 
+</details>
+
 ## License
 
-MIT — see [LICENSE](LICENSE) for details.
+MIT. See [LICENSE](LICENSE).
